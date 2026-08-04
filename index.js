@@ -46,7 +46,7 @@ botTienda.use(async (ctx, next) => {
   if (userEstados.get(ctx.from?.id) === 'SOPORTE' && ctx.message && !ctx.message.text?.startsWith('/')) {
     const markup = { inline_keyboard: [[{ text: "💬 Responder a este cliente", callback_data: `soporte_res_${ctx.from.id}` }]] };
     await botAdmin.telegram.sendMessage(MI_ID, `💬 *NUEVO MENSAJE DE SOPORTE*\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n\n*Dice:* ${ctx.message.text}`, { parse_mode: 'Markdown', reply_markup: markup }).catch(console.log);
-    await ctx.deleteMessage().catch(()=>{}); // Efecto fantasma
+    await ctx.deleteMessage().catch(()=>{}); 
     return ctx.reply('✅ _Tu mensaje fue enviado a la administración. Recibirás respuesta por aquí._', { parse_mode: 'Markdown' }).catch(()=>{});
   }
   return next();
@@ -64,8 +64,7 @@ const menuPrincipalUsuario = {
   ]
 };
 
-// --- FUNCIÓN RESCATADORA DE MENÚ ---
-const enviarMenuPrincipal = async (ctx) => {
+botTienda.start(async (ctx) => {
   userEstados.delete(ctx.from.id);
   intencionCompra.delete(ctx.from.id);
   
@@ -78,14 +77,10 @@ const enviarMenuPrincipal = async (ctx) => {
     await userRef.set({ id: ctx.from.id, nombre: ctx.from.first_name, username: ctx.from.username || 'N/A', ultimo_inicio: new Date().toISOString() }, { merge: true });
   } catch (e) {}
 
-  await ctx.deleteMessage().catch(()=>{});
-  const bienvenida = `${obtenerSaludo()}, ${ctx.from.first_name}!* 👋\n\nBienvenido a tu tienda premium. 🚀\nOfrecemos servicios de alta calidad con garantía y soporte rápido.\n\nSelecciona una opción del menú para comenzar:`;
+  // Texto corregido para evitar el error de formato de Telegram
+  const bienvenida = `${obtenerSaludo()}, *${ctx.from.first_name}!* 👋\n\nBienvenido a tu tienda premium. 🚀\nOfrecemos servicios de alta calidad con garantía y soporte rápido.\n\nSelecciona una opción del menú para comenzar:`;
   await ctx.reply(bienvenida, { parse_mode: 'Markdown', reply_markup: menuPrincipalUsuario }).catch(console.log);
-};
-
-// El bot responderá al comando oficial y también a palabras clave sueltas
-botTienda.start(enviarMenuPrincipal);
-botTienda.hears(/^(start|menu|menú|hola|inicio)$/i, enviarMenuPrincipal);
+});
 
 botTienda.action('menu_inicio', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
@@ -232,7 +227,7 @@ botTienda.action(/pagar_(.+)/, async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
   let compra = intencionCompra.get(ctx.from.id);
   
-  if (!compra) return ctx.editMessageText("❌ Sesión agotada. Inicia la compra de nuevo.", { reply_markup: { inline_keyboard: [[{ text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]] }}).catch(()=>{});
+  if (!compra) return ctx.editMessageText("❌ Sesión agotada. Inicia la compra de nuevo.", { reply_markup: { inline_keyboard: [[{ text: "🏠 Menú", callback_data: "menu_inicio" }]] }}).catch(()=>{});
   
   compra.moneda = moneda;
   let montoBs = 0, montoDivisa = compra[`precio_${moneda.toLowerCase()}`];
@@ -421,7 +416,6 @@ botAdmin.action(/aprobar_(.+)/, async (ctx) => {
 
   adminEstados.set('ENTREGANDO', orden);
 
-  // BORRA LA FOTO PARA NO HACER SPAM Y DEJA EL ESPACIO LIMPIO
   await ctx.deleteMessage().catch(()=>{});
 
   const plantilla = `Correo: \nClave: \nPin: `;
@@ -438,7 +432,7 @@ botAdmin.action(/rechazar_(.+)/, async (ctx) => {
   await ctx.deleteMessage().catch(()=>{}); 
   
   pagosPendientes.delete(ordenId);
-  await ctx.answerCbQuery('Orden Rechazada exitosamente.').catch(()=>{}); // Toast Alert
+  await ctx.answerCbQuery('Orden Rechazada exitosamente.').catch(()=>{}); 
 });
 
 botAdmin.action(/soporte_res_(.+)/, async (ctx) => {
@@ -455,7 +449,7 @@ botAdmin.action(/soporte_res_(.+)/, async (ctx) => {
 botAdmin.on('text', async (ctx, next) => {
   if (ctx.from.id !== MI_ID) return next();
   const texto = ctx.message.text;
-  await ctx.deleteMessage().catch(()=>{}); // Borra el comando del admin para limpieza
+  await ctx.deleteMessage().catch(()=>{}); 
   const estadoActual = adminEstados.get('accion');
 
   // 1️⃣ TASAS MANUAL 
@@ -473,7 +467,7 @@ botAdmin.on('text', async (ctx, next) => {
     return ctx.reply('❌ Formato incorrecto. Ejemplo: `TASA BCV 40.50`', { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
   }
 
-  // 2️⃣ DIFUSIÓN MASIVA (RESTAURADO)
+  // 2️⃣ DIFUSIÓN MASIVA 
   if (estadoActual === 'DIFUSION') {
     if (texto.toUpperCase() === 'CANCELAR') { adminEstados.clear(); return ctx.reply('❌ Acción cancelada.', { reply_markup: btnVolverAdmin }); }
     adminEstados.clear();
@@ -486,7 +480,7 @@ botAdmin.on('text', async (ctx, next) => {
     return ctx.reply(`✅ Mensaje enviado a ${enviados} usuarios registrados.`, { reply_markup: btnVolverAdmin }).catch(()=>{});
   }
 
-  // 3️⃣ BANEOS (RESTAURADO)
+  // 3️⃣ BANEOS 
   if (estadoActual === 'BANEADO') {
     if (texto.toUpperCase() === 'CANCELAR') { adminEstados.clear(); return ctx.reply('❌ Cancelado', { reply_markup: btnVolverAdmin }); }
     adminEstados.clear();
@@ -520,7 +514,6 @@ botAdmin.on('text', async (ctx, next) => {
     fechaVencimiento.setDate(fechaActual.getDate() + 30);
     const strVencimiento = fechaVencimiento.toLocaleDateString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'long' });
     
-    // Enviar mensaje hermoso al cliente
     const msjCliente = `🎉 *¡TU PAGO HA SIDO VERIFICADO Y APROBADO!*\n〰️〰️〰️〰️〰️〰️〰️〰️\nAquí tienes los accesos para tu cuenta de *${orden.compraData.servicio}*:\n\n${texto}\n\n⏳ *Válido hasta:* ${strVencimiento}\n\n💡 _Tip: Recuerda renovar 2 días antes de tu fecha de corte para no perder el servicio._\n\n_¡Gracias por preferirnos!_`;
     
     await botTienda.telegram.sendMessage(orden.userId, msjCliente, { parse_mode: 'Markdown' }).catch(()=>{});
@@ -543,7 +536,7 @@ botAdmin.on('text', async (ctx, next) => {
   return next();
 });
 
-// Iniciadores del sistema (Añadimos el Botón Menú Fijo de Telegram)
+// Iniciadores del sistema con botón menú fijo
 botTienda.launch().then(async () => {
   await botTienda.telegram.setMyCommands([{ command: 'start', description: 'Abrir Tienda / Menú Principal' }]).catch(()=>{});
   console.log("Tienda Premium Iniciada.");
