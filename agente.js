@@ -5,7 +5,7 @@ let tasas = { usdt: 0, euro: 0, bcv: 0, fecha: "Actualizando..." };
 let dbLocal = null;
 
 // 👇 PEGA AQUÍ TU URL DE GOOGLE ENTRE LAS COMILLAS 👇
-const LINK_GOOGLE = 'AQUI_TU_LINK_DE_GOOGLE';
+const LINK_GOOGLE = 'https://script.google.com/macros/s/AKfycbxFjGRQQXQ2xwEhvDaeAz_6YpOJjo_ai75ptYXoIMJjfwDhUqY4DcjLDHirqkO8JlNm/exec';
 
 const servicios = [
   { id: "netflix", nombre: "Netflix 🔴", duracion: "30 días", costo: 2.20, precio_usdt: 3.80, precio_euro: 4.00, precio_bcv: 4.50 },
