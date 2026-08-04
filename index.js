@@ -13,7 +13,7 @@ const botAdmin = new Telegraf(process.env.ADMIN_TOKEN);
 const MI_ID = 8264753970;
 
 const pagosPendientes = new Map();
-
+ 
 // ==========================================
 // 🛒 BOT TIENDA (Para clientes)
 // ==========================================
