@@ -1,8 +1,8 @@
-// ESCUDOS GLOBALES (Prevención de apagados)
+// ESCUDOS GLOBALES
 process.on('uncaughtException', (err) => console.log('Error global evitado:', err.message));
 process.on('unhandledRejection', (err) => console.log('Promesa rechazada evitada:', err.message));
 
-const { Telegraf } = require('telegraf');
+const { Telegraf, Markup } = require('telegraf');
 const admin = require('firebase-admin');
 const http = require('http');
 const agente = require('./agente.js');
@@ -20,10 +20,10 @@ const MI_ID = 8264753970;
 // ==========================================
 // 🧠 MEMORIA Y ESTADOS DEL SISTEMA
 // ==========================================
-const pagosPendientes = new Map(); // Guarda los tickets de pago
-const intencionCompra = new Map(); // Carrito de compras
-const adminEstados = new Map(); // Controla la acción actual del admin
-const userEstados = new Map(); // Controla si el usuario está en modo soporte
+const pagosPendientes = new Map(); 
+const intencionCompra = new Map(); 
+const adminEstados = new Map(); 
+const userEstados = new Map(); 
 const baneados = new Set(); 
 
 // Cargar baneados al iniciar
@@ -35,23 +35,22 @@ db.collection('blacklist').get().then(snap => snap.forEach(doc => baneados.add(p
 botTienda.use(async (ctx, next) => {
   if (ctx.from && baneados.has(ctx.from.id)) return;
   
-  // Redirección de mensajes de soporte
   if (userEstados.get(ctx.from?.id) === 'SOPORTE' && ctx.message && !ctx.message.text?.startsWith('/')) {
     const markup = { inline_keyboard: [[{ text: "💬 Responder a este cliente", callback_data: `soporte_res_${ctx.from.id}` }]] };
-    await botAdmin.telegram.sendMessage(MI_ID, `💬 *MENSAJE DE SOPORTE*\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n\n*Dice:* ${ctx.message.text}`, { parse_mode: 'Markdown', reply_markup: markup }).catch(console.log);
-    return ctx.reply('✅ _Mensaje enviado. Un administrador te responderá pronto._', { parse_mode: 'Markdown' }).catch(()=>{});
+    await botAdmin.telegram.sendMessage(MI_ID, `💬 *NUEVO MENSAJE DE SOPORTE*\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n\n*Dice:* ${ctx.message.text}`, { parse_mode: 'Markdown', reply_markup: markup }).catch(console.log);
+    return ctx.reply('✅ _Tu mensaje fue enviado a la administración. Recibirás respuesta por aquí._', { parse_mode: 'Markdown' }).catch(()=>{});
   }
   return next();
 });
 
 // ==========================================
-// 🛒 BOT TIENDA - MÓDULO DE CLIENTES
+// 🛒 BOT TIENDA - MÓDULO DE USUARIOS
 // ==========================================
 const menuPrincipalUsuario = {
   inline_keyboard: [
-    [{ text: "🛒 Ver Catálogo y Comprar", callback_data: "menu_catalogo" }],
-    [{ text: "📈 Ver Tasas de Hoy", callback_data: "menu_tasas" }, { text: "⭐ Mis Cuentas Activas", callback_data: "menu_suscripcion" }],
-    [{ text: "👤 Mi Perfil e Historial", callback_data: "menu_perfil" }, { text: "📜 Políticas", callback_data: "menu_politicas" }],
+    [{ text: "🛒 Catálogo y Compras", callback_data: "menu_catalogo" }],
+    [{ text: "⭐ Mis Suscripciones", callback_data: "menu_suscripcion" }, { text: "👤 Mi Perfil", callback_data: "menu_perfil" }],
+    [{ text: "📜 Políticas de Garantía", callback_data: "menu_politicas" }],
     [{ text: "🎧 Hablar con Administración", callback_data: "activar_soporte" }]
   ]
 };
@@ -65,13 +64,13 @@ botTienda.start(async (ctx) => {
     
     // Alerta de Nuevo Usuario al Admin
     if (!doc.exists) {
-      await botAdmin.telegram.sendMessage(MI_ID, `🌟 *NUEVO CLIENTE REGISTRADO*\n👤 ${ctx.from.first_name}\n🆔 \`${ctx.from.id}\``, { parse_mode: 'Markdown' }).catch(()=>{});
+      await botAdmin.telegram.sendMessage(MI_ID, `🌟 *¡NUEVO CLIENTE EN LA TIENDA!*\n👤 Nombre: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n🔗 @${ctx.from.username || 'SinUser'}`, { parse_mode: 'Markdown' }).catch(()=>{});
     }
 
     await userRef.set({ id: ctx.from.id, nombre: ctx.from.first_name, username: ctx.from.username || 'N/A', ultimo_inicio: new Date().toISOString() }, { merge: true });
-  } catch (e) { console.log("Error registrando usuario:", e.message); }
+  } catch (e) {}
 
-  const bienvenida = `👋 *¡Bienvenido ${ctx.from.first_name}!* 🚀\n\nSomos tu plataforma automatizada de entretenimiento digital. Aquí podrás comprar cuentas premium, renovar tus servicios y tener soporte directo de forma rápida y segura.\n\n👇 *Toca un botón para comenzar:*`;
+  const bienvenida = `👋 *¡Hola ${ctx.from.first_name}!* Bienvenido a tu tienda premium. 🚀\n\nOfrecemos servicios de alta calidad con garantía y soporte rápido. Selecciona una opción del menú para comenzar:`;
   await ctx.reply(bienvenida, { parse_mode: 'Markdown', reply_markup: menuPrincipalUsuario }).catch(console.log);
 });
 
@@ -81,17 +80,17 @@ botTienda.action('menu_inicio', async (ctx) => {
   await ctx.editMessageText(`🏠 *Menú Principal*\nSelecciona la acción que deseas realizar:`, { parse_mode: 'Markdown', reply_markup: menuPrincipalUsuario }).catch(()=>{});
 });
 
-// --- TASAS DEL DÍA ---
-botTienda.action('menu_tasas', async (ctx) => {
+// --- POLÍTICAS DE GARANTÍA (REPARADO) ---
+botTienda.action('menu_politicas', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
-  const msj = `📈 *TASAS DE CAMBIO ACTUALES*\n\n📅 _Última actualización: ${agente.tasas.fecha}_\n\n🇻🇪 *BCV (Pago Móvil):* ${agente.tasas.bcv} Bs\n🟡 *Binance (USDT):* ${agente.tasas.usdt} Bs\n💶 *Zinli (Euro):* ${agente.tasas.euro} Bs\n\n_Estos valores se usan para calcular el precio exacto de cada servicio._`;
+  const msj = `📜 *POLÍTICAS Y GARANTÍAS*\n\n1️⃣ **Soporte Total:** Garantía válida por los días exactos contratados.\n2️⃣ **Prohibiciones:** Queda ESTRICTAMENTE PROHIBIDO cambiar correos, contraseñas o perfiles. Si lo haces, pierdes la garantía inmediatamente.\n3️⃣ **Entrega:** Las cuentas se entregan solo tras la confirmación del pago por parte del administrador.\n\n_Al comprar, aceptas automáticamente estos términos._`;
   await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Volver al Menú Principal", callback_data: "menu_inicio" }]] } }).catch(()=>{});
 });
 
 // --- PERFIL E HISTORIAL ---
 botTienda.action('menu_perfil', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
-  await ctx.editMessageText(`👤 *MI PERFIL*\n\n*Nombre:* ${ctx.from.first_name}\n*ID Sistema:* \`${ctx.from.id}\`\n\nDesde aquí puedes consultar todas las compras que has realizado.`, {
+  await ctx.editMessageText(`👤 *MI PERFIL*\n\n*Nombre:* ${ctx.from.first_name}\n*ID Sistema:* \`${ctx.from.id}\`\n\nConsulta tus compras realizadas:`, {
     parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
       [{ text: "🧾 Ver Mi Historial de Pagos", callback_data: "historial_pagos" }], 
       [{ text: "🔙 Volver al Menú Principal", callback_data: "menu_inicio" }]
@@ -101,7 +100,7 @@ botTienda.action('menu_perfil', async (ctx) => {
 
 botTienda.action('historial_pagos', async (ctx) => {
   await ctx.answerCbQuery('Buscando pagos...').catch(()=>{});
-  let msj = `🧾 *TU HISTORIAL DE PAGOS*\n\n`;
+  let msj = `🧾 *TU HISTORIAL DE COMPRAS*\n\n`;
   try {
     const snap = await db.collection('usuarios').doc(ctx.from.id.toString()).collection('pagos').orderBy('fecha', 'desc').limit(5).get();
     if (snap.empty) msj += `Aún no has realizado ninguna compra.`;
@@ -109,7 +108,7 @@ botTienda.action('historial_pagos', async (ctx) => {
       snap.forEach(doc => {
         const p = doc.data();
         const fecha = new Date(p.fecha).toLocaleString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'short', timeStyle: 'short' });
-        msj += `✅ *${p.servicio}* | ${fecha}\nMonto: ${p.monto} ${p.moneda}\n\n`;
+        msj += `✅ *${p.servicio}* | ${fecha}\n💵 ${p.monto} ${p.moneda}\n\n`;
       });
     }
   } catch(e) { msj += `Error al cargar base de datos.`; }
@@ -123,50 +122,62 @@ botTienda.action('menu_suscripcion', async (ctx) => {
   let msj = `⭐ *MIS CUENTAS ACTIVAS*\n\n`;
   try {
     const snap = await db.collection('usuarios').doc(ctx.from.id.toString()).collection('suscripciones').where('estado', '==', 'Activo').get();
-    if (snap.empty) msj += `No tienes servicios activos en este momento.`;
-    else {
-      snap.forEach(doc => {
-        const sub = doc.data();
-        msj += `📺 *${sub.servicio}*\n${sub.datos_acceso}\n\n`;
-      });
-    }
+    if (snap.empty) msj += `No tienes servicios activos.`;
+    else { snap.forEach(doc => { const sub = doc.data(); msj += `📺 *${sub.servicio}*\n${sub.datos_acceso}\n\n`; }); }
   } catch (error) { msj += `Error de red. Intenta más tarde.`; }
-  await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Volver al Menú Principal", callback_data: "menu_inicio" }]] } }).catch(()=>{});
+  await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Volver", callback_data: "menu_inicio" }]] } }).catch(()=>{});
 });
 
 // --- CHAT DE SOPORTE ---
 botTienda.action('activar_soporte', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
   userEstados.set(ctx.from.id, 'SOPORTE');
-  await ctx.editMessageText(`🎧 *MODO SOPORTE ACTIVADO*\n\nTodo lo que escribas a continuación será enviado directamente a la administración. Por favor, sé claro con tu duda o problema.\n\n_Escribe tu mensaje:_`, {
-    parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🛑 Finalizar Chat y Volver", callback_data: "menu_inicio" }]] }
+  await ctx.editMessageText(`🎧 *MODO SOPORTE ACTIVADO*\n\nTodo lo que escribas aquí será enviado a la administración.\n\n_Escribe tu mensaje abajo:_`, {
+    parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🛑 Cerrar Chat", callback_data: "menu_inicio" }]] }
   }).catch(()=>{});
 });
 
-// --- CATÁLOGO DE VENTAS ---
+// --- CATÁLOGO DE VENTAS (NUEVO DISEÑO CON TASAS) ---
 botTienda.action('menu_catalogo', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
+  
+  const tUSDT = agente.tasas.usdt.toFixed(2);
+  const tEUR = agente.tasas.euro.toFixed(2);
+  const tBCV = agente.tasas.bcv.toFixed(2);
+
+  let msj = `📺 *CATÁLOGO DE SERVICIOS*\n\n`;
+  msj += `📈 *TASAS DEL DÍA (Valor de 1$):*\n• USDT: ${tUSDT} Bs\n• EURO: ${tEUR} Bs\n• BCV: ${tBCV} Bs\n\n`;
+  msj += `👇 *Selecciona el servicio que deseas:*`;
+
   let botones = [];
   for (let i = 0; i < agente.servicios.length; i += 2) {
     let fila = [{ text: agente.servicios[i].nombre, callback_data: `item_${agente.servicios[i].id}` }];
     if (agente.servicios[i + 1]) fila.push({ text: agente.servicios[i + 1].nombre, callback_data: `item_${agente.servicios[i + 1].id}` });
     botones.push(fila);
   }
-  botones.push([{ text: "🔙 Volver al Menú Principal", callback_data: "menu_inicio" }]);
-  await ctx.editMessageText('📺 *Catálogo Premium*\n\nToca el servicio que deseas comprar para ver sus precios y métodos de pago:', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: botones } }).catch(()=>{});
+  botones.push([{ text: "🔙 Volver", callback_data: "menu_inicio" }]);
+  
+  await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: botones } }).catch(()=>{});
 });
 
 agente.servicios.forEach(servicio => {
   botTienda.action(`item_${servicio.id}`, async (ctx) => {
     await ctx.answerCbQuery().catch(()=>{});
+    
     const pUSDT = (servicio.precio_usdt * agente.tasas.usdt).toFixed(2);
     const pEUR = (servicio.precio_euro * agente.tasas.euro).toFixed(2);
     const pBCV = (servicio.precio_bcv * agente.tasas.bcv).toFixed(2);
 
-    const txt = `*${servicio.nombre}*\n⏳ *Duración:* ${servicio.duracion}\n\n💵 *PRECIO EXACTO A PAGAR:*\n• 🇻🇪 Pago Móvil: *${pBCV} Bs*\n• 🟡 Binance: *${pUSDT} Bs*\n• 💶 Zinli: *${pEUR} Bs*\n\nSi deseas continuar, elige "Comprar":`;
+    const txt = `*${servicio.nombre}*\n⏳ *Duración:* ${servicio.duracion}\n\n` +
+      `💵 *PRECIO DEL SERVICIO:*\n` +
+      `• En USDT: *$${servicio.precio_usdt}* ➔ (${pUSDT} Bs)\n` +
+      `• En EURO: *$${servicio.precio_euro}* ➔ (${pEUR} Bs)\n` +
+      `• En BCV: *$${servicio.precio_bcv}* ➔ (${pBCV} Bs)\n\n` +
+      `Si deseas continuar, elige "Comprar":`;
+
     await ctx.editMessageText(txt, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
-      [{ text: "💳 Comprar Este Servicio", callback_data: `pago_${servicio.id}` }],
-      [{ text: "🔙 Regresar al Catálogo", callback_data: "menu_catalogo" }]
+      [{ text: "💳 Comprar", callback_data: `pago_${servicio.id}` }],
+      [{ text: "🔙 Atrás", callback_data: "menu_catalogo" }]
     ]}}).catch(()=>{});
   });
 
@@ -176,11 +187,14 @@ agente.servicios.forEach(servicio => {
       servicio: servicio.nombre, id_servicio: servicio.id, costo: servicio.costo, 
       precio_usdt: servicio.precio_usdt, precio_euro: servicio.precio_euro, precio_bcv: servicio.precio_bcv,
     });
-    await ctx.editMessageText(`💳 *MÉTODO DE PAGO*\n\nServicio: ${servicio.nombre}\n\nSelecciona en qué moneda enviarás el dinero:`, {
+    
+    // DISEÑO DE MÉTODOS DE PAGO EXACTO COMO PEDISTE
+    await ctx.editMessageText(`💳 *MÉTODO DE PAGO*\n\nSelecciona con qué moneda pagarás *${servicio.nombre}*:`, {
       parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
-        [{ text: `🟡 USDT Binance`, callback_data: "pagar_usdt" }, { text: `💶 EURO Zinli`, callback_data: "pagar_euro" }],
-        [{ text: `🇻🇪 BCV Pago Móvil`, callback_data: "pagar_bcv" }],
-        [{ text: "🔙 Cancelar y Volver", callback_data: `item_${servicio.id}` }]
+        [{ text: `USDT TRC20`, callback_data: "pagar_usdt" }],
+        [{ text: `EURO`, callback_data: "pagar_euro" }],
+        [{ text: `BCV Pago Móvil`, callback_data: "pagar_bcv" }],
+        [{ text: "🔙 Cancelar", callback_data: `item_${servicio.id}` }]
       ]}
     }).catch(()=>{});
   });
@@ -199,9 +213,19 @@ botTienda.action(/pagar_(.+)/, async (ctx) => {
   compra.ganancia = (compra.venta - compra.costo).toFixed(2);
 
   let textoPago = `🏦 *DATOS PARA TRANSFERIR EN ${moneda}*\n\n`;
-  if (moneda === 'BCV') { montoBs = (montoDivisa * agente.tasas.bcv).toFixed(2); textoPago += `*Pago Móvil*\nBanco: Venezuela (0102)\nTeléfono: 04262333684\nCédula: V-27145645\n\n🇻🇪 *MONTO EXACTO A TRANSFERIR: ${montoBs} Bs*`; }
-  if (moneda === 'EURO') { montoBs = (montoDivisa * agente.tasas.euro).toFixed(2); textoPago += `*Zinli*\nUsuario: wilmergabriellucenacrespo\n\n💵 *MONTO EXACTO: ${montoDivisa} €* (Son ${montoBs} Bs)`; }
-  if (moneda === 'USDT') { montoBs = (montoDivisa * agente.tasas.usdt).toFixed(2); textoPago += `*Binance Pay*\nCorreo: wilmergabriellucenacrespo@gmail.com\n\n💵 *MONTO EXACTO: ${montoDivisa} USDT* (Son ${montoBs} Bs)`; }
+  
+  if (moneda === 'USDT') { 
+    montoBs = (montoDivisa * agente.tasas.usdt).toFixed(2); 
+    textoPago += `*USDT (Red TRC20)*\nDirección:\n\`TNCFjTLYp63k2ocAooAnTUJbodaWLrRQhh\`\n\n💵 *MONTO EXACTO: ${montoDivisa} USDT* (${montoBs} Bs)`; 
+  }
+  if (moneda === 'EURO') { 
+    montoBs = (montoDivisa * agente.tasas.euro).toFixed(2); 
+    textoPago += `*Zinli*\nUsuario: wilmergabriellucenacrespo\n\n💵 *MONTO EXACTO: ${montoDivisa} €* (${montoBs} Bs)`; 
+  }
+  if (moneda === 'BCV') { 
+    montoBs = (montoDivisa * agente.tasas.bcv).toFixed(2); 
+    textoPago += `*Pago Móvil*\nBanco: Venezuela (0102)\nTeléfono: 04262333684\nCédula: V-27145645\n\n🇻🇪 *MONTO EXACTO: ${montoBs} Bs*`; 
+  }
 
   intencionCompra.set(ctx.from.id, compra);
   await ctx.editMessageText(`${textoPago}\n\n1️⃣ Realiza el pago.\n2️⃣ Presiona el botón de abajo para subir el comprobante.`, {
@@ -223,24 +247,22 @@ botTienda.on('photo', async (ctx, next) => {
   
   const compraData = intencionCompra.get(ctx.from.id);
   if (!compraData) {
-    return ctx.reply("❌ *No tienes compras pendientes.*\nDebes elegir un servicio en el catálogo primero.", { parse_mode: 'Markdown' }).catch(()=>{});
+    return ctx.reply("❌ *No tienes compras pendientes.*\nSelecciona un servicio en el catálogo primero.", { parse_mode: 'Markdown' }).catch(()=>{});
   }
 
   const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
   const ordenId = Math.floor(Math.random() * 100000).toString();
   await ctx.deleteMessage().catch(() => {});
   
-  // Guardamos TODA la estructura para el Admin
   pagosPendientes.set(ordenId, { userId: ctx.from.id, username: ctx.from.username || ctx.from.first_name, compraData, ordenId, fileId });
 
-  await ctx.reply('✅ *Comprobante recibido con éxito.*\n\nEstamos verificando tu pago. Tus datos de acceso te llegarán por aquí.', {
+  await ctx.reply('✅ *Comprobante recibido con éxito.*\n\nEl administrador lo está verificando. Tus datos de acceso llegarán por aquí.', {
     parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🏠 Volver al Menú Principal", callback_data: "menu_inicio" }]] }
   }).catch(()=>{});
 
   notificacionesPendientes++;
   actualizarPanelAdmin();
 
-  // ENVÍO DIRECTO AL ADMIN
   const fichaAdmin = `📋 *NUEVA ORDEN #${ordenId}*\n👤 Cliente: ${ctx.from.first_name}\n🛒 Servicio: ${compraData.servicio}\n💵 Método: ${compraData.moneda}\n💰 Ganancia Esperada: $${compraData.ganancia}`;
   await botAdmin.telegram.sendPhoto(MI_ID, fileId, {
     caption: fichaAdmin, parse_mode: 'Markdown',
@@ -258,13 +280,14 @@ let notificacionesPendientes = 0;
 let mensajePanelId = null;
 
 function obtenerMenuAdmin() {
-  const btnNotif = notificacionesPendientes > 0 ? `🔔 REVISAR ${notificacionesPendientes} PAGOS PENDIENTES` : `🔕 No hay pagos nuevos`;
+  const btnNotif = notificacionesPendientes > 0 ? `🔔 VER ${notificacionesPendientes} PAGOS PENDIENTES` : `🔕 No hay pagos nuevos`;
   return {
     inline_keyboard: [
       [{ text: btnNotif, callback_data: "admin_notif" }],
-      [{ text: "📊 Ver Ganancias", callback_data: "admin_reportes" }, { text: "👥 Ver Clientes", callback_data: "admin_clientes" }],
-      [{ text: "🔄 Actualizar Tasas API", callback_data: "admin_tasas" }, { text: "✏️ Modificar Tasas Manual", callback_data: "admin_tasas_manual" }],
-      [{ text: "📢 Enviar Mensaje a Todos", callback_data: "admin_difusion" }, { text: "🛑 Banear Usuario", callback_data: "admin_banear" }]
+      [{ text: "👥 Ver Clientes (Fichas)", callback_data: "admin_clientes" }, { text: "📊 Reportes", callback_data: "admin_reportes" }],
+      [{ text: "🔄 Tasas API", callback_data: "admin_tasas" }, { text: "✏️ Tasas Manual", callback_data: "admin_tasas_manual" }],
+      [{ text: "📦 Inventario Precargado", callback_data: "admin_inventario" }, { text: "⏳ Radar Vencimientos", callback_data: "admin_radar" }],
+      [{ text: "📢 Difusión Masiva", callback_data: "admin_difusion" }, { text: "🛑 Banear", callback_data: "admin_banear" }]
     ]
   };
 }
@@ -290,18 +313,18 @@ botAdmin.action('admin_inicio', async (ctx) => {
   await ctx.editMessageText('👑 *PANEL DE CONTROL ADMINISTRATIVO*\n\nElige qué deseas gestionar hoy:', { parse_mode: 'Markdown', reply_markup: obtenerMenuAdmin() }).catch(()=>{});
 });
 
-// --- REVISOR DE PAGOS (EL BOTÓN QUE FALTABA) ---
+// --- VER PAGOS PENDIENTES (OBLIGA A MOSTRAR LA FOTO DE NUEVO) ---
 botAdmin.action('admin_notif', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
   if (pagosPendientes.size === 0) {
     return ctx.editMessageText('✅ *Todo al día*\nNo hay pagos pendientes en la memoria.', { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
   }
   
-  await ctx.editMessageText('🔄 *Reenviando recibos pendientes...*', { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
+  await ctx.editMessageText('🔄 *Generando recibos en el chat...*\nDesliza hacia abajo para verlos.', { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
   
-  // Reenvía todos los tickets que están en espera
   for (let [ordenId, orden] of pagosPendientes) {
     const ficha = `📋 *RECORDATORIO DE ORDEN #${ordenId}*\n👤 Cliente: ${orden.username}\n🛒 Servicio: ${orden.compraData.servicio}\n💵 Método: ${orden.compraData.moneda}`;
+    // Aquí el bot VUELVE A ENVIAR LA FOTO REAL DEL COMPROBANTE AL ADMIN
     await botAdmin.telegram.sendPhoto(MI_ID, orden.fileId, {
       caption: ficha, parse_mode: 'Markdown',
       reply_markup: { inline_keyboard: [[{ text: "✅ Aprobar", callback_data: `aprobar_${ordenId}` }, { text: "❌ Rechazar", callback_data: `rechazar_${ordenId}` }]] }
@@ -309,17 +332,41 @@ botAdmin.action('admin_notif', async (ctx) => {
   }
 });
 
-// --- MÓDULOS DE BD (CLIENTES Y REPORTES) ---
+// --- FICHA DE CLIENTES (NUEVA LÓGICA INTERACTIVA) ---
 botAdmin.action('admin_clientes', async (ctx) => {
   await ctx.answerCbQuery('Consultando Firebase...').catch(()=>{});
   try {
     const snapshot = await db.collection('usuarios').orderBy('ultimo_inicio', 'desc').limit(5).get();
-    let msj = `👥 *BASE DE CLIENTES*\n\nTotal registrados: *${snapshot.size}*\n\n*Últimos 5 activos:*\n`;
-    snapshot.forEach(doc => { const u = doc.data(); msj += `👤 ${u.nombre} - ID: \`${u.id}\`\n`; });
-    await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
+    
+    let botonesClientes = [];
+    snapshot.forEach(doc => {
+      const u = doc.data(); 
+      botonesClientes.push([{ text: `👤 ${u.nombre}`, callback_data: `ficha_${u.id}` }]);
+    });
+    botonesClientes.push([{ text: "🔙 Volver", callback_data: "admin_inicio" }]);
+
+    await ctx.editMessageText(`👥 *BASE DE CLIENTES*\n\nTotal registrados: *${snapshot.size}*\nSelecciona un usuario para ver su ficha y contactarlo:`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: botonesClientes } }).catch(()=>{});
   } catch (error) { ctx.editMessageText('❌ Error al consultar.', { reply_markup: btnVolverAdmin }).catch(()=>{}); }
 });
 
+botAdmin.action(/ficha_(.+)/, async (ctx) => {
+  const uId = ctx.match[1];
+  await ctx.answerCbQuery().catch(()=>{});
+  
+  let msj = `👤 *FICHA DEL CLIENTE*\n🆔 ID: \`${uId}\`\n\n*Últimas Compras:*\n`;
+  try {
+    const snap = await db.collection('usuarios').doc(uId).collection('pagos').orderBy('fecha', 'desc').limit(3).get();
+    if(snap.empty) msj += `_Sin compras registradas._\n`;
+    else snap.forEach(doc => { msj += `• ${doc.data().servicio} (${doc.data().moneda})\n`; });
+  } catch(e) {}
+
+  await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
+    [{ text: "💬 Enviar Mensaje Directo", callback_data: `soporte_res_${uId}` }],
+    [{ text: "🔙 Volver a Clientes", callback_data: "admin_clientes" }]
+  ]}}).catch(()=>{});
+});
+
+// --- REPORTES ---
 botAdmin.action('admin_reportes', async (ctx) => {
   await ctx.answerCbQuery('Calculando...').catch(()=>{});
   let totalV = 0, totalG = 0, cantidad = 0;
@@ -337,10 +384,20 @@ botAdmin.action('admin_tasas', async (ctx) => {
 
 botAdmin.action('admin_tasas_manual', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
-  await ctx.editMessageText(`✏️ *FIJAR TASA MANUALMENTE*\n\nEnvía un mensaje normal aquí con este formato (puedes usar coma o punto):\n\n\`TASA BCV 40.50\`\n\`TASA USDT 42,10\`\n\`TASA EURO 45\``, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
+  await ctx.editMessageText(`✏️ *FIJAR TASA MANUALMENTE*\n\nEnvía un mensaje normal aquí con este formato (puedes usar coma o punto):\n\n\`TASA BCV 40.50\`\n\`TASA USDT 42.10\`\n\`TASA EURO 45\``, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
 
-// --- BANEOS Y DIFUSIÓN ---
+// --- HERRAMIENTAS ADICIONALES ---
+botAdmin.action('admin_inventario', async (ctx) => {
+  await ctx.answerCbQuery().catch(()=>{});
+  await ctx.editMessageText('📦 *INVENTARIO PRECARGADO*\n\n_Módulo en construcción. Permitirá cargar cuentas para entrega automática al aprobar pagos._', { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
+});
+
+botAdmin.action('admin_radar', async (ctx) => {
+  await ctx.answerCbQuery().catch(()=>{});
+  await ctx.editMessageText('⏳ *RADAR DE VENCIMIENTOS*\n\n_Módulo en construcción. Escaneará Firebase y alertará clientes con cuentas por vencer en 3 días._', { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
+});
+
 botAdmin.action('admin_banear', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
   adminEstados.set('accion', 'BANEADO');
@@ -353,7 +410,6 @@ botAdmin.action('admin_difusion', async (ctx) => {
   await ctx.editMessageText('📢 *DIFUSIÓN MASIVA*\n\nEscribe el mensaje que llegará a toda tu base de datos. Para salir, envía CANCELAR.', { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
 
-
 // --- LÓGICA DE APROBACIÓN DE PAGOS ---
 botAdmin.action(/aprobar_(.+)/, async (ctx) => {
   const ordenId = ctx.match[1];
@@ -364,8 +420,10 @@ botAdmin.action(/aprobar_(.+)/, async (ctx) => {
   if (notificacionesPendientes > 0) notificacionesPendientes--;
   actualizarPanelAdmin();
 
-  const msg = `✅ *PAGO APROBADO* (Orden #${ordenId})\n\n✍️ *Paso Final:* Escribe y envía los datos de acceso que recibirá el usuario.\nEjemplo:\n\`Correo: fulano@gmail.com\`\n\`Clave: 1234\``;
-  await ctx.editMessageCaption(`✅ *Aprobando... Esperando datos*`, { parse_mode: 'Markdown' }).catch(()=>{});
+  // BORRA LA FOTO PARA NO HACER SPAM Y DEJA EL ESPACIO LIMPIO
+  await ctx.deleteMessage().catch(()=>{});
+
+  const msg = `✅ *PAGO APROBADO* (Orden #${ordenId})\n\n✍️ *Paso Final:* Escribe y envía directamente en este chat los datos de acceso que recibirá el usuario.\n\n*Ejemplo:*\n\`Correo: fulano@gmail.com\`\n\`Clave: 1234\`\n\`Vence: 25 de Octubre\``;
   await ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
 
@@ -375,19 +433,19 @@ botAdmin.action(/rechazar_(.+)/, async (ctx) => {
   if (!orden) return ctx.answerCbQuery('Orden ya procesada.', { show_alert: true }).catch(()=>{});
   
   await botTienda.telegram.sendMessage(orden.userId, '❌ *Pago Rechazado*\n\nHubo un problema al verificar tu pago. Comunícate con Soporte.', { parse_mode: 'Markdown' }).catch(()=>{});
-  await ctx.editMessageCaption(`❌ *RECHAZADO* (Orden #${ordenId})`, { parse_mode: 'Markdown' }).catch(()=>{});
+  await ctx.deleteMessage().catch(()=>{}); // Borra la foto de la bandeja
   
   pagosPendientes.delete(ordenId);
   if (notificacionesPendientes > 0) notificacionesPendientes--;
   actualizarPanelAdmin();
 });
 
-// RESPONDER SOPORTE (Botón generado en el middleware)
+// RESPONDER SOPORTE (Botón generado en Fichas o Middleware)
 botAdmin.action(/soporte_res_(.+)/, async (ctx) => {
   const targetId = ctx.match[1];
   await ctx.answerCbQuery().catch(()=>{});
   adminEstados.set('RESPONDIENDO_SOPORTE', targetId);
-  await ctx.reply(`✍️ *MODO RESPUESTA*\n\nEscribe el mensaje para el usuario \`${targetId}\`\n(Escribe CANCELAR para salir)`, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
+  await ctx.editMessageText(`✍️ *MODO RESPUESTA*\n\nEscribe el mensaje para el usuario.\n(Escribe CANCELAR para salir)`, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
 
 
@@ -437,22 +495,24 @@ botAdmin.on('text', async (ctx, next) => {
     return ctx.reply(`✅ Usuario \`${texto}\` baneado permanentemente.`, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
   }
 
-  // 4️⃣ ENVIAR DATOS DE LA CUENTA
+  // 4️⃣ ENVIAR DATOS DE LA CUENTA (APROBACIÓN)
   if (adminEstados.has('ENTREGANDO')) {
     if (texto.toUpperCase() === 'CANCELAR') {
       adminEstados.clear();
-      return ctx.reply('❌ Entrega cancelada. El comprobante sigue pendiente.', { reply_markup: btnVolverAdmin }).catch(()=>{});
+      return ctx.reply('❌ Entrega cancelada. El comprobante sigue en tu memoria.', { reply_markup: btnVolverAdmin }).catch(()=>{});
     }
 
     const orden = adminEstados.get('ENTREGANDO');
     
-    // Enviar al cliente
+    // Enviar mensaje al cliente (solo a ese cliente)
     await botTienda.telegram.sendMessage(orden.userId, `🎉 *¡PAGO VERIFICADO!*\n\nTus datos de acceso para *${orden.compraData.servicio}*:\n\n${texto}\n\n_¡Gracias por preferirnos!_`, { parse_mode: 'Markdown' }).catch(()=>{});
 
-    // Guardar en Firebase
+    // Guardar en Firebase en la Ficha del Usuario
     const hoyISO = new Date().toISOString();
     await db.collection('usuarios').doc(orden.userId.toString()).collection('suscripciones').add({ servicio: orden.compraData.servicio, datos_acceso: texto, fecha_compra: hoyISO, estado: 'Activo' }).catch(()=>{});
     await db.collection('usuarios').doc(orden.userId.toString()).collection('pagos').add({ servicio: orden.compraData.servicio, monto: orden.compraData.venta, moneda: orden.compraData.moneda, fecha: hoyISO }).catch(()=>{});
+    
+    // Guardar en Ventas Globales
     await db.collection('ventas').doc(orden.ordenId).set({ ordenId: orden.ordenId, clienteId: orden.userId, servicio: orden.compraData.servicio, venta_usd: parseFloat(orden.compraData.venta), ganancia_usd: parseFloat(orden.compraData.ganancia), fecha_venta: hoyISO }).catch(()=>{});
 
     adminEstados.clear();
@@ -460,14 +520,14 @@ botAdmin.on('text', async (ctx, next) => {
     return ctx.reply(`✅ *Cuenta Entregada y Guardada*`, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
   }
 
-  // 5️⃣ RESPONDER SOPORTE
+  // 5️⃣ RESPONDER SOPORTE A UN CLIENTE
   if (adminEstados.has('RESPONDIENDO_SOPORTE')) {
     const targetId = adminEstados.get('RESPONDIENDO_SOPORTE');
     if (texto.toUpperCase() === 'CANCELAR') { adminEstados.clear(); return ctx.reply('❌ Respuesta cancelada.', { reply_markup: btnVolverAdmin }); }
     
     await botTienda.telegram.sendMessage(targetId, `👨‍💻 *Respuesta de Administración:*\n\n${texto}`, { parse_mode: 'Markdown' }).catch(()=>{});
     adminEstados.clear();
-    return ctx.reply('✅ Respuesta enviada al cliente.', { reply_markup: btnVolverAdmin }).catch(()=>{});
+    return ctx.reply('✅ Respuesta enviada al cliente exitósamente.', { reply_markup: btnVolverAdmin }).catch(()=>{});
   }
 
   return next();
