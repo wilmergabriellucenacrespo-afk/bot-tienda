@@ -8,7 +8,7 @@ let dbLocal = null;
 const LINK_GOOGLE = 'https://script.google.com/macros/s/AKfycbygubr9rTBpzd8hDQqggb3nIZ5dX8fcLpfepd1FlUGz116O7PugaUvbw1HnzhjKPlu-/exec';
 
 const servicios = [
-  { id: "netflix", nombre: "Netflix 🔴", duracion: "30 días", costo: 2.20, precio_usdt: 3.80, precio_euro: 4.00, precio_bcv: 4.50 },
+  { id: "netflix", nombre: "Netflix 🔴", duracion: "30 días", costo: 2.20, precio_usdt: 5.00, precio_euro: 4.00, precio_bcv: 6.00 },
   { id: "spotify", nombre: "Spotify Premium 🟢", duracion: "30 días", costo: 1.00, precio_usdt: 2.00, precio_euro: 2.20, precio_bcv: 2.50 },
   { id: "disney", nombre: "Disney+ 🔵", duracion: "30 días", costo: 1.20, precio_usdt: 2.50, precio_euro: 2.80, precio_bcv: 3.00 },
   { id: "max", nombre: "Max (HBO) 🟣", duracion: "30 días", costo: 1.20, precio_usdt: 2.50, precio_euro: 2.80, precio_bcv: 3.00 },
