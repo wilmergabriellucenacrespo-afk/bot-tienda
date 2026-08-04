@@ -1,4 +1,4 @@
-// agente.js - Motor Financiero Real (Blindado con doble API)
+// agente.js - Motor Financiero Anti-Bloqueos
 let tasas = { usdt: 0, euro: 0, bcv: 0, fecha: "Actualizando..." };
 let dbLocal = null;
 
@@ -25,51 +25,69 @@ async function iniciar(db) {
   setInterval(actualizarTasas, 43200000); // 12 horas
 }
 
+// NUEVA ESTRATEGIA: Camuflaje de peticiones para evitar bloqueos
+async function obtenerDatosAPI(url) {
+  try {
+    const respuesta = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'es-ES,es;q=0.9',
+        'Connection': 'keep-alive'
+      }
+    });
+    
+    if (!respuesta.ok) throw new Error(`HTTP Error: ${respuesta.status}`);
+    
+    const texto = await respuesta.text(); // Leemos como texto primero para evitar cuelgues
+    
+    try {
+      return JSON.parse(texto); // Intentamos convertir el texto a formato JSON
+    } catch (e) {
+      throw new Error("Posible bloqueo de Cloudflare. Respuesta del servidor: " + texto.substring(0, 80));
+    }
+  } catch (error) {
+    console.log(`[Error en API] Falló la conexión a ${url.substring(0, 40)}... Detalle: ${error.message}`);
+    return null;
+  }
+}
+
 async function actualizarTasas() {
+  console.log("🔄 Iniciando búsqueda de tasas con camuflaje...");
   let precioBcv = 0, precioBinance = 0, precioEuro = 0;
 
-  console.log("🔄 Buscando tasas reales en el mercado...");
-
-  try {
-    // INTENTO 1: Usando PyDolarVenezuela
-    const req = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/dollar');
-    const data = await req.json();
-
-    // La API a veces agrupa en "monitors", revisamos ambas posibilidades
-    precioBcv = data.monitors?.bcv?.price || data.bcv?.price || 0;
-    precioBinance = data.monitors?.binance?.price || data.binance?.price || 0;
-    
-    const reqEuro = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/euro');
-    const dataEuro = await reqEuro.json();
-    precioEuro = dataEuro.monitors?.bcv?.price || dataEuro.bcv?.price || 0;
-
-  } catch (error1) {
-    console.log("⚠️ Falló la API PyDolar. Intentando con DolarAPI (Error: " + error1.message + ")");
+  // INTENTO 1: PyDolarVenezuela (Suele ser la más exacta)
+  const dataPyDolar = await obtenerDatosAPI('https://pydolarvenezuela-api.vercel.app/api/v1/dollar');
+  if (dataPyDolar) {
+    precioBcv = dataPyDolar.monitors?.bcv?.price || dataPyDolar.bcv?.price || 0;
+    precioBinance = dataPyDolar.monitors?.binance?.price || dataPyDolar.binance?.price || 0;
   }
 
-  // INTENTO 2: Si la primera falló o devolvió 0, usamos DolarAPI
+  const dataPyEuro = await obtenerDatosAPI('https://pydolarvenezuela-api.vercel.app/api/v1/euro');
+  if (dataPyEuro) {
+    precioEuro = dataPyEuro.monitors?.bcv?.price || dataPyEuro.bcv?.price || 0;
+  }
+
+  // INTENTO 2: DolarAPI (Respaldo)
   if (precioBcv === 0) {
-    try {
-      const opcionesHeader = { 'Accept': 'application/json' };
-      
-      const reqBcv = await fetch('https://ve.dolarapi.com/v1/dolares/oficial', { headers: opcionesHeader });
-      precioBcv = (await reqBcv.json()).promedio || 0;
+    console.log("⚠️ PyDolar no respondió o devolvió cero. Intentando con DolarAPI...");
+    
+    const resBcv = await obtenerDatosAPI('https://ve.dolarapi.com/v1/dolares/oficial');
+    if (resBcv) precioBcv = resBcv.promedio || 0;
 
-      const reqUsdt = await fetch('https://ve.dolarapi.com/v1/dolares/binance', { headers: opcionesHeader });
-      precioBinance = (await reqUsdt.json()).promedio || 0;
+    const resUsdt = await obtenerDatosAPI('https://ve.dolarapi.com/v1/dolares/binance');
+    if (resUsdt) precioBinance = resUsdt.promedio || 0;
 
-      const reqEur = await fetch('https://ve.dolarapi.com/v1/dolares/euro', { headers: opcionesHeader });
-      precioEuro = (await reqEur.json()).promedio || 0;
-    } catch (error2) {
-      console.log("❌ Falló DolarAPI. (Error: " + error2.message + ")");
-    }
+    const resEur = await obtenerDatosAPI('https://ve.dolarapi.com/v1/dolares/euro');
+    if (resEur) precioEuro = resEur.promedio || 0;
   }
 
-  // VALIDACIÓN FINAL Y GUARDADO
+  // VALIDACIÓN Y GUARDADO FINAL
   if (precioBcv > 0 && precioBinance > 0) {
     tasas.bcv = parseFloat(precioBcv);
     tasas.usdt = parseFloat(precioBinance);
-    tasas.euro = parseFloat(precioEuro > 0 ? precioEuro : precioBcv * 1.05); // Respaldo para el euro
+    tasas.euro = parseFloat(precioEuro > 0 ? precioEuro : precioBcv * 1.05);
     
     const opcionesFecha = { timeZone: 'America/Caracas', dateStyle: 'long', timeStyle: 'short' };
     tasas.fecha = new Date().toLocaleString('es-VE', opcionesFecha);
@@ -77,9 +95,9 @@ async function actualizarTasas() {
     if (dbLocal) {
       await dbLocal.collection('sistema').doc('tasas_memoria').set(tasas).catch(()=>{});
     }
-    console.log(`✅ [TASAS REALES ACTUALIZADAS] BCV: ${tasas.bcv} | USDT: ${tasas.usdt} | EURO: ${tasas.euro}`);
+    console.log(`✅ [TASAS REALES OBTENIDAS] BCV: ${tasas.bcv} | USDT: ${tasas.usdt} | EURO: ${tasas.euro}`);
   } else {
-    console.log("🚨 ALERTA: Ninguna API devolvió datos válidos. El bot está usando la última tasa guardada en Firebase.");
+    console.log("🚨 ALERTA CRÍTICA: Ninguna API arrojó datos válidos.");
   }
 }
 
