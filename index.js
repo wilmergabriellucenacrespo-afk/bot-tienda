@@ -1,4 +1,4 @@
-const { Telegraf } = require('telegraf'); // Eliminamos 'session' (ya no hay registro obligatorio)
+const { Telegraf } = require('telegraf');
 const admin = require('firebase-admin');
 const http = require('http');
 
@@ -44,11 +44,12 @@ const menuPrincipal = {
   inline_keyboard: [
     [{ text: "🛒 Catálogo y Precios", callback_data: "menu_catalogo" }],
     [{ text: "💳 Métodos de Pago", callback_data: "menu_pagos" }],
-    [{ text: "⭐ Mi Suscripción", callback_data: "menu_suscripcion" }]
+    [{ text: "⭐ Mi Suscripción", callback_data: "menu_suscripcion" }, { text: "👤 Mi Perfil", callback_data: "menu_perfil" }],
+    [{ text: "📜 Políticas de Garantía", callback_data: "menu_politicas" }],
+    [{ text: "🎧 Contactar a Soporte", url: "https://t.me/Mitienda_Adminbot" }] // Botón con enlace directo
   ]
 };
 
-// Acceso directo sin registro
 botTienda.start((ctx) => {
   ctx.reply(`👋 ¡Hola ${ctx.from.first_name}! Bienvenido a la Tienda.\n\nSelecciona una opción del menú:`, {
     parse_mode: 'Markdown',
@@ -151,7 +152,7 @@ botTienda.action('menu_pagos', async (ctx) => {
     reply_markup: { 
       inline_keyboard: [
         [{ text: "📤 Subir Comprobante", callback_data: "subir_pago" }],
-        [{ text: "🔙 Volver Atrás", callback_data: "menu_inicio" }, { text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]
+        [{ text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]
       ] 
     }
   });
@@ -162,13 +163,28 @@ botTienda.action('subir_pago', async (ctx) => {
   await ctx.reply('📸 Envía la foto de tu comprobante de pago por este chat.');
 });
 
+// --- BOTONES SECUNDARIOS ---
 botTienda.action('menu_suscripcion', async (ctx) => {
   await ctx.answerCbQuery();
   await ctx.editMessageText('⭐ *Mi Suscripción*\n\nAún no tienes suscripciones activas vinculadas a este usuario.', {
     parse_mode: 'Markdown',
-    reply_markup: { 
-      inline_keyboard: [[{ text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]] 
-    }
+    reply_markup: { inline_keyboard: [[{ text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]] }
+  });
+});
+
+botTienda.action('menu_perfil', async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.editMessageText('👤 *Mi Perfil*\n\nAquí podrás ver tus datos registrados y actualizar tu información (Módulo en construcción).', {
+    parse_mode: 'Markdown',
+    reply_markup: { inline_keyboard: [[{ text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]] }
+  });
+});
+
+botTienda.action('menu_politicas', async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.editMessageText('📜 *Políticas de Garantía*\n\n1. Todas las cuentas tienen garantía de 30 días continuos.\n2. Está estrictamente prohibido cambiar las contraseñas o alterar los perfiles asignados.\n3. La entrega del servicio se realiza únicamente tras verificar el pago en nuestras cuentas.\n\nEl incumplimiento de estas normas anula la garantía de forma inmediata.', {
+    parse_mode: 'Markdown',
+    reply_markup: { inline_keyboard: [[{ text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]] }
   });
 });
 
