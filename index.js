@@ -77,7 +77,6 @@ botTienda.start(async (ctx) => {
     await userRef.set({ id: ctx.from.id, nombre: ctx.from.first_name, username: ctx.from.username || 'N/A', ultimo_inicio: new Date().toISOString() }, { merge: true });
   } catch (e) {}
 
-  // Texto corregido para evitar el error de formato de Telegram
   const bienvenida = `${obtenerSaludo()}, *${ctx.from.first_name}!* 👋\n\nBienvenido a tu tienda premium. 🚀\nOfrecemos servicios de alta calidad con garantía y soporte rápido.\n\nSelecciona una opción del menú para comenzar:`;
   await ctx.reply(bienvenida, { parse_mode: 'Markdown', reply_markup: menuPrincipalUsuario }).catch(console.log);
 });
@@ -91,13 +90,13 @@ botTienda.action('menu_inicio', async (ctx) => {
 
 botTienda.action('menu_faq', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
-  const msj = `🏠 Inicio > ❓ *Preguntas Frecuentes*\n〰️〰️〰️〰️〰️〰️〰️〰️\n\n🔹 *¿Cuánto tarda la entrega?*\nR: Una vez envíes el comprobante, validamos tu pago y entregamos en un lapso de 5 a 15 minutos.\n\n🔹 *¿Qué pasa si mi pantalla deja de funcionar?*\nR: Escribe a nuestro soporte. Tienes garantía total durante tus 30 días, te la repondremos.\n\n🔹 *¿Puedo pagar desde otro banco?*\nR: Sí, vía Pago Móvil aceptamos transferencias desde cualquier banco nacional.`;
+  const msj = `🏠 Inicio > ❓ *Preguntas Frecuentes*\n〰️〰️〰️〰️〰️〰️〰️〰️\n\n🔹 *¿Cuánto tarda la entrega?*\nR: Una vez envíes el comprobante, validamos tu pago y entregamos en un lapso de 5 a 15 minutos.\n\n🔹 *¿Qué pasa si mi pantalla deja de funcionar?*\nR: Escribe a nuestro soporte. Tienes garantía total durante tus 30 días.\n\n🔹 *¿Puedo pagar desde otro banco?*\nR: Sí, vía Pago Móvil aceptamos transferencias desde cualquier banco nacional.`;
   await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Volver al Menú", callback_data: "menu_inicio" }]] } }).catch(()=>{});
 });
 
 botTienda.action('menu_politicas', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
-  const msj = `🏠 Inicio > 📜 *POLÍTICAS Y GARANTÍAS*\n〰️〰️〰️〰️〰️〰️〰️〰️\n\n1️⃣ **Soporte Total:** Garantía válida por los días exactos contratados.\n2️⃣ **Prohibiciones:** Queda ESTRICTAMENTE PROHIBIDO cambiar correos, contraseñas o perfiles. Si lo haces, pierdes la garantía inmediatamente.\n3️⃣ **Entrega:** Las cuentas se entregan solo tras la confirmación del pago por parte del administrador.\n\n_Al comprar, aceptas automáticamente estos términos._`;
+  const msj = `🏠 Inicio > 📜 *POLÍTICAS Y GARANTÍAS*\n〰️〰️〰️〰️〰️〰️〰️〰️\n\n1️⃣ **Soporte Total:** Garantía válida por los días exactos contratados.\n2️⃣ **Prohibiciones:** Queda ESTRICTAMENTE PROHIBIDO cambiar correos, contraseñas o perfiles. Si lo haces, pierdes la garantía inmediatamente.\n3️⃣ **Entrega:** Las cuentas se entregan solo tras la confirmación del pago por parte del administrador.`;
   await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Volver al Menú Principal", callback_data: "menu_inicio" }]] } }).catch(()=>{});
 });
 
@@ -130,7 +129,7 @@ botTienda.action('historial_pagos', async (ctx) => {
 });
 
 botTienda.action('menu_suscripcion', async (ctx) => {
-  await ctx.answerCbQuery('Cargando cuentas y vigencias...').catch(()=>{});
+  await ctx.answerCbQuery('Cargando cuentas...').catch(()=>{});
   let msj = `🏠 Inicio > ⭐ *MIS CUENTAS ACTIVAS*\n〰️〰️〰️〰️〰️〰️〰️〰️\n`;
   try {
     const snap = await db.collection('usuarios').doc(ctx.from.id.toString()).collection('suscripciones').where('estado', '==', 'Activo').get();
@@ -163,6 +162,7 @@ botTienda.action('activar_soporte', async (ctx) => {
   }).catch(()=>{});
 });
 
+// --- CATÁLOGO ---
 botTienda.action('menu_catalogo', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
   const tUSDT = agente.tasas.usdt.toFixed(2);
@@ -170,8 +170,7 @@ botTienda.action('menu_catalogo', async (ctx) => {
   const tBCV = agente.tasas.bcv.toFixed(2);
 
   let msj = `🏠 Inicio > 🛒 *CATÁLOGO DE SERVICIOS*\n〰️〰️〰️〰️〰️〰️〰️〰️\n`;
-  msj += `📈 *TASAS DEL DÍA (Referencia de 1$):*\n• USDT: ${tUSDT} Bs\n• EURO: ${tEUR} Bs\n• BCV: ${tBCV} Bs\n\n`;
-  msj += `👇 *Selecciona el servicio que deseas:*`;
+  msj += `👇 *Selecciona el servicio que deseas adquirir:*`;
 
   let botones = [];
   for (let i = 0; i < agente.servicios.length; i += 2) {
@@ -184,6 +183,7 @@ botTienda.action('menu_catalogo', async (ctx) => {
   await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: botones } }).catch(()=>{});
 });
 
+// --- DETALLE DEL SERVICIO (CON TASAS VISIBLES COMO PEDISTE) ---
 agente.servicios.forEach(servicio => {
   botTienda.action(`item_${servicio.id}`, async (ctx) => {
     await ctx.answerCbQuery().catch(()=>{});
@@ -192,8 +192,13 @@ agente.servicios.forEach(servicio => {
     const pEUR = (servicio.precio_euro * agente.tasas.euro).toFixed(2);
     const pBCV = (servicio.precio_bcv * agente.tasas.bcv).toFixed(2);
 
-    const txt = `🏠 Inicio > 🛒 Catálogo > *${servicio.nombre}*\n〰️〰️〰️〰️〰️〰️〰️〰️\n⏳ *Duración:* ${servicio.duracion}\n\n` +
-      `💵 *INVERSIÓN POR MONEDA:*\n` +
+    const txt = `🏠 Inicio > 🛒 Catálogo > *${servicio.nombre}*\n〰️〰️〰️〰️〰️〰️〰️〰️\n` +
+      `⏳ *Duración:* ${servicio.duracion}\n\n` +
+      `📈 *VALOR DE 1 DÓLAR HOY (Tasas Referenciales):*\n` +
+      `• BCV: ${agente.tasas.bcv.toFixed(2)} Bs\n` +
+      `• USDT: ${agente.tasas.usdt.toFixed(2)} Bs\n` +
+      `• EURO: ${agente.tasas.euro.toFixed(2)} Bs\n\n` +
+      `💵 *INVERSIÓN TOTAL DEL SERVICIO:*\n` +
       `• BCV (Pago Móvil): *$${servicio.precio_bcv.toFixed(2)}* ➔ (${pBCV} Bs)\n` +
       `• USDT (Binance): *$${servicio.precio_usdt.toFixed(2)}* ➔ (${pUSDT} Bs)\n` +
       `• EURO (Zinli): *$${servicio.precio_euro.toFixed(2)}* ➔ (${pEUR} Bs)\n\n` +
@@ -214,7 +219,7 @@ agente.servicios.forEach(servicio => {
     
     await ctx.editMessageText(`🏠 Inicio > 💳 *MÉTODO DE PAGO*\n〰️〰️〰️〰️〰️〰️〰️〰️\nServicio: *${servicio.nombre}*\n\nSelecciona con qué moneda pagarás:`, {
       parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
-        [{ text: `USDT TRC20`, callback_data: "pagar_usdt" }, { text: `EURO Zinli`, callback_data: "pagar_euro" }],
+        [{ text: `USDT TRC20 / Binance`, callback_data: "pagar_usdt" }, { text: `EURO Zinli`, callback_data: "pagar_euro" }],
         [{ text: `BCV Pago Móvil`, callback_data: "pagar_bcv" }],
         [{ text: "🔙 Cancelar y Atrás", callback_data: `item_${servicio.id}` }]
       ]}
@@ -234,7 +239,6 @@ botTienda.action(/pagar_(.+)/, async (ctx) => {
   compra.venta = montoDivisa;
   compra.ganancia = (compra.venta - compra.costo).toFixed(2);
 
-  // TEXTOS DE PAGO: SIEMPRE SE MUESTRA PAGO MÓVIL TAMBIÉN
   let textoPago = `🧾 *RESUMEN DE FACTURACIÓN*\n〰️〰️〰️〰️〰️〰️〰️〰️\n🛒 *Servicio:* ${compra.servicio}\n\n_(Toca los datos bancarios para copiarlos)_\n\n`;
   const datosPagoMovil = `\n🏦 *Datos de Pago Móvil (Alternativa en BCV)*\nBanco: Venezuela (0102)\nTeléfono: \`04262333684\`\nCédula: \`V27145645\``;
   
@@ -266,7 +270,7 @@ botTienda.action('subir_pago', async (ctx) => {
   await ctx.editMessageText('📸 *Enviar Comprobante*\n\nPor favor, adjunta y envía la foto de tu comprobante de pago en este chat ahora mismo.', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Cancelar Compra", callback_data: "menu_inicio" }]] } }).catch(()=>{});
 });
 
-// RECEPCIÓN DE COMPROBANTES 
+// --- RECEPCIÓN INMEDIATA DEL PAGO PARA EL ADMIN ---
 botTienda.on('photo', async (ctx, next) => {
   if (userEstados.get(ctx.from.id) === 'SOPORTE') return next(); 
   
@@ -281,19 +285,22 @@ botTienda.on('photo', async (ctx, next) => {
   
   pagosPendientes.set(ordenId, { userId: ctx.from.id, username: ctx.from.username || ctx.from.first_name, compraData, ordenId, fileId });
 
-  await ctx.reply('✅ *Comprobante recibido con éxito.*\n\nNuestra administración lo está verificando. Tus datos de acceso llegarán por aquí en breve.', {
+  await ctx.reply('✅ *Comprobante recibido con éxito.*\n\nNuestra administración lo está verificando en este momento. Tus datos de acceso llegarán por aquí en breve y quedarán fijados en tu pantalla.', {
     parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🏠 Volver al Menú Principal", callback_data: "menu_inicio" }]] }
   }).catch(()=>{});
 
-  // Iconografía de Monedas
   let iconoMoneda = '🇻🇪';
   if(compraData.moneda === 'USDT') iconoMoneda = '🟢';
   if(compraData.moneda === 'EURO') iconoMoneda = '💶';
 
-  const fichaAdmin = `🚨 *¡NUEVA ORDEN DE COMPRA! (#${ordenId})*\n〰️〰️〰️〰️〰️〰️〰️〰️\n👤 Cliente: ${ctx.from.first_name}\n🛒 Servicio: ${compraData.servicio}\n💵 Método: ${iconoMoneda} ${compraData.moneda}\n💰 Ganancia Esperada: $${compraData.ganancia}`;
+  // ESTO SE DESPLIEGA EN LA PANTALLA DEL ADMIN INMEDIATAMENTE
+  const fichaAdmin = `🚨 *¡NUEVA ORDEN DE COMPRA! (#${ordenId})*\n〰️〰️〰️〰️〰️〰️〰️〰️\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n🛒 Servicio: ${compraData.servicio}\n💵 Método: ${iconoMoneda} ${compraData.moneda}\n💰 Ganancia Esperada: $${compraData.ganancia}`;
   await botAdmin.telegram.sendPhoto(MI_ID, fileId, {
     caption: fichaAdmin, parse_mode: 'Markdown',
-    reply_markup: { inline_keyboard: [[{ text: "✅ Aprobar", callback_data: `aprobar_${ordenId}` }, { text: "❌ Rechazar", callback_data: `rechazar_${ordenId}` }]] }
+    reply_markup: { inline_keyboard: [
+      [{ text: "✅ Aprobar Pago", callback_data: `aprobar_${ordenId}` }], 
+      [{ text: "❌ Rechazar Pago", callback_data: `rechazar_${ordenId}` }]
+    ]}
   }).catch(e => console.log("Fallo al enviar recibo al admin:", e.message));
   
   intencionCompra.delete(ctx.from.id);
@@ -319,7 +326,7 @@ const btnVolverAdmin = { inline_keyboard: [[{ text: "🔙 Volver al Panel de Con
 botAdmin.start(async (ctx) => {
   if (ctx.from.id !== MI_ID) return;
   adminEstados.clear();
-  await ctx.reply('👑 *PANEL DE CONTROL ADMINISTRATIVO*\n\nElige qué deseas gestionar hoy:', { parse_mode: 'Markdown', reply_markup: obtenerMenuAdmin() }).catch(()=>{});
+  await ctx.reply('👑 *PANEL DE CONTROL ADMINISTRATIVO*\n\nLas notificaciones de pagos llegarán aquí automáticamente.', { parse_mode: 'Markdown', reply_markup: obtenerMenuAdmin() }).catch(()=>{});
 });
 
 botAdmin.action('admin_inicio', async (ctx) => {
@@ -328,19 +335,17 @@ botAdmin.action('admin_inicio', async (ctx) => {
   await ctx.editMessageText('👑 *PANEL DE CONTROL ADMINISTRATIVO*\n\nElige qué deseas gestionar hoy:', { parse_mode: 'Markdown', reply_markup: obtenerMenuAdmin() }).catch(()=>{});
 });
 
-// --- FICHA DE CLIENTES ---
+// --- MÓDULOS DE ADMINISTRADOR RESTAURADOS ---
 botAdmin.action('admin_clientes', async (ctx) => {
   await ctx.answerCbQuery('Consultando Firebase...').catch(()=>{});
   try {
     const snapshot = await db.collection('usuarios').orderBy('ultimo_inicio', 'desc').limit(5).get();
-    
     let botonesClientes = [];
     snapshot.forEach(doc => {
       const u = doc.data(); 
       botonesClientes.push([{ text: `👤 ${u.nombre}`, callback_data: `ficha_${u.id}` }]);
     });
     botonesClientes.push([{ text: "🔙 Volver", callback_data: "admin_inicio" }]);
-
     await ctx.editMessageText(`👥 *BASE DE CLIENTES*\n\nTotal registrados: *${snapshot.size}* (Mostrando últimos 5)\nSelecciona un usuario para ver su ficha y contactarlo:`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: botonesClientes } }).catch(()=>{});
   } catch (error) { ctx.editMessageText('❌ Error al consultar.', { reply_markup: btnVolverAdmin }).catch(()=>{}); }
 });
@@ -348,21 +353,18 @@ botAdmin.action('admin_clientes', async (ctx) => {
 botAdmin.action(/ficha_(.+)/, async (ctx) => {
   const uId = ctx.match[1];
   await ctx.answerCbQuery().catch(()=>{});
-  
   let msj = `👤 *FICHA DEL CLIENTE*\n🆔 ID: \`${uId}\`\n\n*Últimas Compras:*\n`;
   try {
     const snap = await db.collection('usuarios').doc(uId).collection('pagos').orderBy('fecha', 'desc').limit(3).get();
     if(snap.empty) msj += `_Sin compras registradas._\n`;
     else snap.forEach(doc => { msj += `• ${doc.data().servicio} (${doc.data().moneda})\n`; });
   } catch(e) {}
-
   await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
     [{ text: "💬 Enviar Mensaje Directo", callback_data: `soporte_res_${uId}` }],
     [{ text: "🔙 Volver a Clientes", callback_data: "admin_clientes" }]
   ]}}).catch(()=>{});
 });
 
-// --- REPORTES FINANCIEROS (RESTAURADO) ---
 botAdmin.action('admin_reportes', async (ctx) => {
   await ctx.answerCbQuery('Calculando base de datos...').catch(()=>{});
   let totalV = 0, totalG = 0, cantidad = 0;
@@ -373,27 +375,14 @@ botAdmin.action('admin_reportes', async (ctx) => {
   } catch(e) { await ctx.editMessageText('❌ Error al cargar reportes.', { reply_markup: btnVolverAdmin }).catch(()=>{}); }
 });
 
-// --- TASAS ---
-botAdmin.action('admin_tasas', async (ctx) => {
-  await ctx.answerCbQuery('Consultando Motor...').catch(()=>{});
-  await agente.actualizarTasas();
-  await ctx.editMessageText(`✅ *Tasas Actualizadas*\n\nUSDT: ${agente.tasas.usdt} Bs\nEURO: ${agente.tasas.euro} Bs\nBCV: ${agente.tasas.bcv} Bs`, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
-});
-
-botAdmin.action('admin_tasas_manual', async (ctx) => {
-  await ctx.answerCbQuery().catch(()=>{});
-  await ctx.editMessageText(`✏️ *FIJAR TASA MANUALMENTE*\n\nEnvía un mensaje normal aquí con este formato (usa puntos):\n\n\`TASA BCV 40.50\`\n\`TASA USDT 42.10\`\n\`TASA EURO 45.00\``, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
-});
-
-// --- HERRAMIENTAS ADICIONALES (RESTAURADO) ---
 botAdmin.action('admin_inventario', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
-  await ctx.editMessageText('📦 *INVENTARIO PRECARGADO*\n\n_Módulo en construcción. Permitirá cargar cuentas para entrega automática al aprobar pagos._', { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
+  await ctx.editMessageText('📦 *INVENTARIO PRECARGADO*\n\n_Módulo en construcción._', { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
 
 botAdmin.action('admin_radar', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
-  await ctx.editMessageText('⏳ *RADAR DE VENCIMIENTOS*\n\n_Módulo en construcción. Escaneará Firebase y alertará clientes con cuentas por vencer en 3 días._', { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
+  await ctx.editMessageText('⏳ *RADAR DE VENCIMIENTOS*\n\n_Módulo en construcción._', { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
 
 botAdmin.action('admin_banear', async (ctx) => {
@@ -408,7 +397,18 @@ botAdmin.action('admin_difusion', async (ctx) => {
   await ctx.editMessageText('📢 *DIFUSIÓN MASIVA*\n\nEscribe el mensaje que llegará a toda tu base de datos. Para salir, envía CANCELAR.', { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
 
-// --- LÓGICA DE APROBACIÓN DE PAGOS (MEJORADA CON +30 DÍAS AUTOMÁTICOS) ---
+botAdmin.action('admin_tasas', async (ctx) => {
+  await ctx.answerCbQuery('Consultando Motor...').catch(()=>{});
+  await agente.actualizarTasas();
+  await ctx.editMessageText(`✅ *Tasas Actualizadas*\n\nUSDT: ${agente.tasas.usdt} Bs\nEURO: ${agente.tasas.euro} Bs\nBCV: ${agente.tasas.bcv} Bs`, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
+});
+
+botAdmin.action('admin_tasas_manual', async (ctx) => {
+  await ctx.answerCbQuery().catch(()=>{});
+  await ctx.editMessageText(`✏️ *FIJAR TASA MANUALMENTE*\n\nEnvía un mensaje normal aquí con este formato (usa puntos):\n\n\`TASA BCV 40.50\`\n\`TASA USDT 42.10\`\n\`TASA EURO 45.00\``, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
+});
+
+// --- LÓGICA DE APROBACIÓN DE PAGOS (PLANTILLA PARA ADMIN) ---
 botAdmin.action(/aprobar_(.+)/, async (ctx) => {
   const ordenId = ctx.match[1];
   const orden = pagosPendientes.get(ordenId);
@@ -416,10 +416,11 @@ botAdmin.action(/aprobar_(.+)/, async (ctx) => {
 
   adminEstados.set('ENTREGANDO', orden);
 
+  // BORRAMOS EL COMPROBANTE PARA MANTENER TU PANEL LIMPIO
   await ctx.deleteMessage().catch(()=>{});
 
-  const plantilla = `Correo: \nClave: \nPin: `;
-  const msg = `✅ *PAGO APROBADO (#${ordenId})*\n\n✍️ *Paso Final:* Copia la plantilla abajo, llénala y envíala. *El bot calculará automáticamente los 30 días de vigencia y lo añadirá al mensaje final.*\n\n\`${plantilla}\``;
+  const plantilla = `Correo: \nClave: \nPerfil/Pin: `;
+  const msg = `✅ *PAGO APROBADO (#${ordenId})*\n\n✍️ *Paso Final:* Copia la plantilla abajo, llénala y envíala. \n_Nota: Las fechas de inicio, vencimiento y cuenta regresiva se calcularán y anclarán solas en el chat del usuario._\n\n\`${plantilla}\``;
   await ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar Entrega", callback_data: "admin_inicio" }]] } }).catch(()=>{});
 });
 
@@ -430,7 +431,6 @@ botAdmin.action(/rechazar_(.+)/, async (ctx) => {
   
   await botTienda.telegram.sendMessage(orden.userId, '❌ *Pago Rechazado*\n\nHubo un problema al verificar tu pago. Comunícate con Soporte desde el Menú Principal.', { parse_mode: 'Markdown' }).catch(()=>{});
   await ctx.deleteMessage().catch(()=>{}); 
-  
   pagosPendientes.delete(ordenId);
   await ctx.answerCbQuery('Orden Rechazada exitosamente.').catch(()=>{}); 
 });
@@ -444,7 +444,7 @@ botAdmin.action(/soporte_res_(.+)/, async (ctx) => {
 
 
 // ==========================================
-// 🛠️ MOTOR CEREBRAL DEL ADMIN (ESCUCHADOR DE TEXTOS COMPLETO)
+// 🛠️ MOTOR CEREBRAL DEL ADMIN (ESCUCHADOR DE TEXTOS)
 // ==========================================
 botAdmin.on('text', async (ctx, next) => {
   if (ctx.from.id !== MI_ID) return next();
@@ -467,7 +467,7 @@ botAdmin.on('text', async (ctx, next) => {
     return ctx.reply('❌ Formato incorrecto. Ejemplo: `TASA BCV 40.50`', { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
   }
 
-  // 2️⃣ DIFUSIÓN MASIVA 
+  // 2️⃣ DIFUSIÓN MASIVA
   if (estadoActual === 'DIFUSION') {
     if (texto.toUpperCase() === 'CANCELAR') { adminEstados.clear(); return ctx.reply('❌ Acción cancelada.', { reply_markup: btnVolverAdmin }); }
     adminEstados.clear();
@@ -499,7 +499,7 @@ botAdmin.on('text', async (ctx, next) => {
     return ctx.reply('✅ Respuesta enviada al cliente exitósamente.', { reply_markup: btnVolverAdmin }).catch(()=>{});
   }
 
-  // 5️⃣ ENVIAR DATOS DE LA CUENTA Y GENERAR HISTORIAL (+30 DÍAS)
+  // 5️⃣ ENTREGA DE CUENTA Y ANCLAJE EN PANTALLA
   if (adminEstados.has('ENTREGANDO')) {
     if (texto.toUpperCase() === 'CANCELAR') {
       adminEstados.clear();
@@ -508,37 +508,83 @@ botAdmin.on('text', async (ctx, next) => {
 
     const orden = adminEstados.get('ENTREGANDO');
     
-    // Fechas dinámicas (+30 días automáticos)
+    // Cálculos de Fechas
     const fechaActual = new Date();
     const fechaVencimiento = new Date();
     fechaVencimiento.setDate(fechaActual.getDate() + 30);
+    
+    const strInicio = fechaActual.toLocaleDateString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'long' });
     const strVencimiento = fechaVencimiento.toLocaleDateString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'long' });
+    const diasRestantes = 30; // Al momento de entregar son 30 exactos
     
-    const msjCliente = `🎉 *¡TU PAGO HA SIDO VERIFICADO Y APROBADO!*\n〰️〰️〰️〰️〰️〰️〰️〰️\nAquí tienes los accesos para tu cuenta de *${orden.compraData.servicio}*:\n\n${texto}\n\n⏳ *Válido hasta:* ${strVencimiento}\n\n💡 _Tip: Recuerda renovar 2 días antes de tu fecha de corte para no perder el servicio._\n\n_¡Gracias por preferirnos!_`;
+    // Mensaje Hermoso para el Cliente
+    const msjCliente = `🎉 *¡TU PAGO HA SIDO APROBADO!*\n〰️〰️〰️〰️〰️〰️〰️〰️\nAquí están los accesos de tu cuenta de *${orden.compraData.servicio}*:\n\n${texto}\n\n📅 *Fecha de Inicio:* ${strInicio}\n⌛ *Fecha de Corte:* ${strVencimiento}\n⏳ *TIEMPO RESTANTE:* ${diasRestantes} Días 🟢\n\n_¡Gracias por tu compra! Este mensaje quedará anclado aquí para tu comodidad._`;
     
-    await botTienda.telegram.sendMessage(orden.userId, msjCliente, { parse_mode: 'Markdown' }).catch(()=>{});
+    // Enviar y Anclar el mensaje
+    let sentMsg = await botTienda.telegram.sendMessage(orden.userId, msjCliente, { parse_mode: 'Markdown' }).catch(()=>{});
+    if (sentMsg) {
+      await botTienda.telegram.pinChatMessage(orden.userId, sentMsg.message_id).catch(()=>{});
+    }
 
-    // Guardar en Firebase en la Ficha del Usuario
+    // Guardar en BD (Incluimos el ID del mensaje para poder actualizar la cuenta regresiva después)
     const hoyISO = fechaActual.toISOString();
     const vencimientoISO = fechaVencimiento.toISOString();
+    const msgIdParaGuardar = sentMsg ? sentMsg.message_id : null;
     
-    await db.collection('usuarios').doc(orden.userId.toString()).collection('suscripciones').add({ servicio: orden.compraData.servicio, datos_acceso: texto, fecha_compra: hoyISO, fecha_corte: vencimientoISO, estado: 'Activo' }).catch(()=>{});
+    await db.collection('usuarios').doc(orden.userId.toString()).collection('suscripciones').add({ servicio: orden.compraData.servicio, datos_acceso: texto, fecha_compra: hoyISO, fecha_corte: vencimientoISO, estado: 'Activo', pinned_msg_id: msgIdParaGuardar }).catch(()=>{});
     await db.collection('usuarios').doc(orden.userId.toString()).collection('pagos').add({ servicio: orden.compraData.servicio, monto: orden.compraData.venta, moneda: orden.compraData.moneda, fecha: hoyISO }).catch(()=>{});
-    
-    // Guardar en Ventas Globales para los Reportes
     await db.collection('ventas').doc(orden.ordenId).set({ ordenId: orden.ordenId, clienteId: orden.userId, servicio: orden.compraData.servicio, venta_usd: parseFloat(orden.compraData.venta), ganancia_usd: parseFloat(orden.compraData.ganancia), fecha_venta: hoyISO }).catch(()=>{});
 
     adminEstados.clear();
     pagosPendientes.delete(orden.ordenId);
-    return ctx.reply(`✅ *Cuenta Entregada Exitosamente.*\nTodos los historiales y reportes de base de datos fueron actualizados.`, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
+    return ctx.reply(`✅ *Cuenta Entregada y Mensaje Anclado.*\nHistoriales de Usuario y Ventas actualizados.`, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
   }
 
   return next();
 });
 
+// ==========================================
+// ⏱️ ACTUALIZADOR DIARIO DE CUENTAS REGRESIVAS
+// ==========================================
+async function actualizarCuentasRegresivas() {
+  try {
+    const usersSnap = await db.collection('usuarios').get();
+    for (let userDoc of usersSnap.docs) {
+      const subsSnap = await userDoc.ref.collection('suscripciones').where('estado', '==', 'Activo').get();
+      
+      for (let docSub of subsSnap.docs) {
+        const sub = docSub.data();
+        if (sub.pinned_msg_id) {
+          const hoy = new Date();
+          const fechaCorte = new Date(sub.fecha_corte);
+          const diasRestantes = Math.ceil((fechaCorte - hoy) / (1000 * 60 * 60 * 24));
+          
+          if (diasRestantes > 0) {
+            let semaforo = '🟢';
+            if(diasRestantes <= 3) semaforo = '🟡 (Por Vencer)';
+            const strInicio = new Date(sub.fecha_compra).toLocaleDateString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'long' });
+            const strVencimiento = fechaCorte.toLocaleDateString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'long' });
+
+            const textoActualizado = `🎉 *¡SUSCRIPCIÓN ACTIVA!*\n〰️〰️〰️〰️〰️〰️〰️〰️\nAquí están los accesos de tu cuenta de *${sub.servicio}*:\n\n${sub.datos_acceso}\n\n📅 *Fecha de Inicio:* ${strInicio}\n⌛ *Fecha de Corte:* ${strVencimiento}\n⏳ *TIEMPO RESTANTE:* ${diasRestantes} Días ${semaforo}`;
+            await botTienda.telegram.editMessageText(userDoc.id, sub.pinned_msg_id, null, textoActualizado, { parse_mode: 'Markdown' }).catch(()=>{});
+          } else {
+            await docSub.ref.update({ estado: 'Vencido' }).catch(()=>{});
+            await botTienda.telegram.unpinChatMessage(userDoc.id, sub.pinned_msg_id).catch(()=>{});
+            await botTienda.telegram.sendMessage(userDoc.id, `⚠️ *Suscripción Vencida*\nTu servicio de *${sub.servicio}* ha expirado. Por favor, ingresa al catálogo para renovar.`, { parse_mode: 'Markdown' }).catch(()=>{});
+          }
+        }
+      }
+    }
+  } catch (e) { console.log("Error en actualizador:", e.message); }
+}
+
+// Ejecuta la actualización de los mensajes anclados cada 6 horas automáticamente
+setInterval(actualizarCuentasRegresivas, 6 * 60 * 60 * 1000);
+
+
 // Iniciadores del sistema con botón menú fijo
 botTienda.launch().then(async () => {
-  await botTienda.telegram.setMyCommands([{ command: 'start', description: 'Abrir Tienda / Menú Principal' }]).catch(()=>{});
+  await botTienda.telegram.setMyCommands([{ command: 'start', description: '🏠 Abrir Tienda Principal' }]).catch(()=>{});
   console.log("Tienda Premium Iniciada.");
 }).catch(console.error);
 
