@@ -77,6 +77,9 @@ async function actualizarTasas() {
   console.log("🔄 Preguntando tasas al Puente de Google...");
   
   const datos = await pedirAGoogle(LINK_GOOGLE);
+  
+  // 👇 ESTA ES LA LÍNEA NUEVA PARA SABER LA VERDAD 👇
+  console.log("📦 RESPUESTA DE GOOGLE:", datos);
 
   if (datos && datos.bcv > 0 && datos.binance > 0) {
     tasas.bcv = parseFloat(datos.bcv);
@@ -91,10 +94,9 @@ async function actualizarTasas() {
     }
     console.log(`✅ [TASAS OBTENIDAS VÍA GOOGLE] BCV: ${tasas.bcv} | USDT: ${tasas.usdt} | EURO: ${tasas.euro}`);
   } else {
-    console.log("🚨 Falló la lectura de Google (o los permisos son incorrectos). Se mantiene la tasa anterior.");
+    console.log("🚨 Falló la lectura (Los valores vinieron en cero). Se mantiene la tasa anterior.");
   }
 }
-
 async function setTasaManual(moneda, valor) {
   if (moneda === 'BCV') tasas.bcv = parseFloat(valor);
   if (moneda === 'USDT') tasas.usdt = parseFloat(valor);
