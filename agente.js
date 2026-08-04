@@ -17,34 +17,46 @@ const servicios = [
 
 function pedirAGoogle(url) {
   return new Promise((resolve) => {
+    console.log("🌐 Intentando conectar con Google...");
     https.get(url, (res) => {
-      // Si hay redirección (Google Apps Script siempre redirige la primera vez)
+      // Si Google nos redirige (Comportamiento normal)
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         https.get(res.headers.location, (resRedir) => {
           let data = '';
           resRedir.on('data', (chunk) => data += chunk);
           resRedir.on('end', () => {
             try { 
-              resolve(JSON.parse(data)); 
+              const json = JSON.parse(data);
+              resolve(json); 
             } catch (e) { 
-              console.log("Error al leer datos de redirección:", e.message);
+              console.log("❌ GOOGLE RESPONDIÓ CON TEXTO NO VÁLIDO. Aquí está lo que envió Google:");
+              console.log("RAW DATA:", data.substring(0, 300)); // Imprimimos los primeros 300 caracteres del error real
               resolve(null); 
             }
           });
-        }).on('error', () => resolve(null));
+        }).on('error', (err) => {
+          console.log("❌ ERROR DE RED AL REDIRIGIR:", err.message);
+          resolve(null);
+        });
       } else {
+        // Si no hay redirección
         let data = '';
         res.on('data', (chunk) => data += chunk);
         res.on('end', () => {
           try { 
-            resolve(JSON.parse(data)); 
+            const json = JSON.parse(data);
+            resolve(json); 
           } catch (e) { 
-            console.log("Error al leer datos directos:", e.message);
+            console.log("❌ GOOGLE RESPONDIÓ SIN REDIRECCIÓN Y CON ERROR:");
+            console.log("RAW DATA:", data.substring(0, 300));
             resolve(null); 
           }
         });
       }
-    }).on('error', () => resolve(null));
+    }).on('error', (err) => {
+      console.log("❌ ERROR DE RED FATAL. Render no tiene internet:", err.message);
+      resolve(null);
+    });
   });
 }
 
