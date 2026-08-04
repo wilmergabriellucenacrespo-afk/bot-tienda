@@ -1,11 +1,11 @@
-// agente.js - Motor Financiero Inmune (Conexión vía Google Apps Script)
+// agente.js - Motor Financiero Inmune (Conexión vía Google Apps Script - Blindado)
 const https = require('https');
 
 let tasas = { usdt: 0, euro: 0, bcv: 0, fecha: "Actualizando..." };
 let dbLocal = null;
 
-// 👇 PEGA AQUÍ TU URL DE GOOGLE (Asegúrate de mantener las comillas) 👇
-const LINK_GOOGLE = 'https://script.google.com/macros/s/AKfycbwA08NCbB8-_iFDIubdESrqJgwsxJTjosbxLGXPM1K4RPxj9THBUjxc4euTxI-IGWmF/exec';
+// 👇 PEGA AQUÍ TU URL DE GOOGLE ENTRE LAS COMILLAS 👇
+const LINK_GOOGLE = 'AQUI_TU_LINK_DE_GOOGLE';
 
 const servicios = [
   { id: "netflix", nombre: "Netflix 🔴", duracion: "30 días", costo: 2.20, precio_usdt: 3.80, precio_euro: 4.00, precio_bcv: 4.50 },
@@ -18,18 +18,30 @@ const servicios = [
 function pedirAGoogle(url) {
   return new Promise((resolve) => {
     https.get(url, (res) => {
-      // Si hay redirección (muy común en Google Apps Script), la seguimos
+      // Si hay redirección (Google Apps Script siempre redirige la primera vez)
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         https.get(res.headers.location, (resRedir) => {
           let data = '';
           resRedir.on('data', (chunk) => data += chunk);
-          resRedir.on('end', () => resolve(JSON.parse(data)));
+          resRedir.on('end', () => {
+            try { 
+              resolve(JSON.parse(data)); 
+            } catch (e) { 
+              console.log("Error al leer datos de redirección:", e.message);
+              resolve(null); 
+            }
+          });
         }).on('error', () => resolve(null));
       } else {
         let data = '';
         res.on('data', (chunk) => data += chunk);
         res.on('end', () => {
-          try { resolve(JSON.parse(data)); } catch (e) { resolve(null); }
+          try { 
+            resolve(JSON.parse(data)); 
+          } catch (e) { 
+            console.log("Error al leer datos directos:", e.message);
+            resolve(null); 
+          }
         });
       }
     }).on('error', () => resolve(null));
@@ -62,10 +74,12 @@ async function actualizarTasas() {
     const opcionesFecha = { timeZone: 'America/Caracas', dateStyle: 'long', timeStyle: 'short' };
     tasas.fecha = new Date().toLocaleString('es-VE', opcionesFecha);
 
-    if (dbLocal) await dbLocal.collection('sistema').doc('tasas_memoria').set(tasas).catch(()=>{});
+    if (dbLocal) {
+      await dbLocal.collection('sistema').doc('tasas_memoria').set(tasas).catch(()=>{});
+    }
     console.log(`✅ [TASAS OBTENIDAS VÍA GOOGLE] BCV: ${tasas.bcv} | USDT: ${tasas.usdt} | EURO: ${tasas.euro}`);
   } else {
-    console.log("🚨 Falló la conexión con Google. Se mantiene la última tasa.");
+    console.log("🚨 Falló la lectura de Google (o los permisos son incorrectos). Se mantiene la tasa anterior.");
   }
 }
 
@@ -75,7 +89,9 @@ async function setTasaManual(moneda, valor) {
   if (moneda === 'EURO') tasas.euro = parseFloat(valor);
   tasas.fecha = "Fijada Manualmente";
   
-  if (dbLocal) await dbLocal.collection('sistema').doc('tasas_memoria').set(tasas).catch(()=>{});
+  if (dbLocal) {
+    await dbLocal.collection('sistema').doc('tasas_memoria').set(tasas).catch(()=>{});
+  }
 }
 
-module.exports = { tasas, servicios, 
+module.exports = { tasas, servicios, iniciar, actualizarTasas, setTasaManual };
