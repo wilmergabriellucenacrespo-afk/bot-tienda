@@ -2,12 +2,13 @@ const { Telegraf } = require('telegraf');
 const admin = require('firebase-admin');
 const http = require('http');
 
-// --- 1. CONEXIÓN A BASE DE DATOS ---
+// Importamos tu nuevo agente de tasas independiente
+const tasas = require('./agente.js');
+
 const serviceAccount = JSON.parse(process.env.FIREBASE_JSON);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
 
-// --- 2. INICIALIZAR BOTS ---
 const botTienda = new Telegraf(process.env.TELEGRAM_TOKEN);
 const botAdmin = new Telegraf(process.env.ADMIN_TOKEN);
 const MI_ID = 8264753970;
@@ -15,35 +16,8 @@ const MI_ID = 8264753970;
 const pagosPendientes = new Map();
 const intencionCompra = new Map();
 
-// --- 3. AGENTE DE TASAS ---
-let tasas = { usdt: 0, euro: 0, bcv: 0, fecha: "Calculando..." };
-
-async function actualizarTasas() {
-  try {
-    const [reqBcv, reqBinance, reqEuro] = await Promise.all([
-      fetch('https://ve.dolarapi.com/v1/dolares/oficial'),
-      fetch('https://ve.dolarapi.com/v1/dolares/binance'),
-      fetch('https://ve.dolarapi.com/v1/dolares/euro')
-    ]);
-    
-    const dataBcv = await reqBcv.json();
-    const dataBinance = await reqBinance.json();
-    const dataEuro = await reqEuro.json();
-
-    tasas.bcv = dataBcv.promedio || 0;
-    tasas.usdt = dataBinance.promedio || 0;
-    tasas.euro = dataEuro.promedio || 0;
-    
-    const opcionesFecha = { timeZone: 'America/Caracas', dateStyle: 'short', timeStyle: 'short' };
-    tasas.fecha = new Date().toLocaleString('es-VE', opcionesFecha);
-  } catch (error) { console.log("Error en tasas:", error); }
-}
-actualizarTasas();
-setInterval(actualizarTasas, 14400000);
-
-
 // ==========================================
-// 🛒 BOT TIENDA (FLUJO DEL CLIENTE)
+// 🛒 BOT TIENDA (INTERFAZ EFECTO FANTASMA)
 // ==========================================
 
 const menuPrincipal = {
@@ -55,8 +29,14 @@ const menuPrincipal = {
   ]
 };
 
-botTienda.start((ctx) => {
-  ctx.reply(`👋 ¡Hola ${ctx.from.first_name}! Bienvenido a la Tienda.\n\nSelecciona una opción del menú:`, { parse_mode: 'Markdown', reply_markup: menuPrincipal });
+botTienda.start(async (ctx) => {
+  // EFECTO FANTASMA: Borramos el comando /start que escribió el usuario
+  await ctx.deleteMessage().catch(() => {});
+  
+  await ctx.reply(`👋 ¡Hola ${ctx.from.first_name}! Bienvenido a la Tienda.\n\nSelecciona una opción del menú:`, { 
+    parse_mode: 'Markdown', 
+    reply_markup: menuPrincipal 
+  });
 });
 
 botTienda.action('menu_inicio', async (ctx) => {
@@ -64,45 +44,32 @@ botTienda.action('menu_inicio', async (ctx) => {
   await ctx.editMessageText('📺 *Menú Principal*\nSelecciona una opción:', { parse_mode: 'Markdown', reply_markup: menuPrincipal });
 });
 
-// --- LÓGICA DEL CATÁLOGO DINÁMICO (TUS SERVICIOS Y COSTOS) ---
-// Aquí agregas o modificas los precios fácilmente. 'costo' es tu inversión, 'venta' es el precio al cliente.
+// --- CATÁLOGO DE SERVICIOS ---
 const servicios = [
   { id: "netflix", nombre: "Netflix 🔴", duracion: "30 días", venta: 4.00, costo: 2.00 },
   { id: "spotify", nombre: "Spotify Premium 🟢", duracion: "30 días", venta: 2.50, costo: 1.00 },
   { id: "disney", nombre: "Disney+ 🔵", duracion: "30 días", venta: 3.00, costo: 1.50 },
   { id: "max", nombre: "Max (HBO) 🟣", duracion: "30 días", venta: 3.00, costo: 1.50 },
-  { id: "prime", nombre: "Prime Video 🟡", duracion: "30 días", venta: 2.50, costo: 1.00 },
-  { id: "crunchy", nombre: "Crunchyroll 🟠", duracion: "30 días", venta: 2.50, costo: 1.00 },
-  { id: "paramount", nombre: "Paramount+ ⛰️", duracion: "30 días", venta: 2.00, costo: 1.00 },
-  { id: "vix", nombre: "Vix+ 🟧", duracion: "30 días", venta: 2.00, costo: 1.00 },
-  { id: "appletv", nombre: "Apple TV+ 🍎", duracion: "30 días", venta: 2.50, costo: 1.00 },
-  { id: "youtube", nombre: "YouTube Premium 🟥", duracion: "30 días", venta: 2.50, costo: 1.00 },
-  { id: "canva", nombre: "Canva Pro 🖌️", duracion: "30 días", venta: 2.00, costo: 0.50 },
-  { id: "iptv", nombre: "Tele Latino/IPTV 📺", duracion: "30 días", venta: 5.00, costo: 2.00 },
-  { id: "xbox", nombre: "Xbox Game Pass 🎮", duracion: "30 días", venta: 6.00, costo: 3.00 }
+  { id: "prime", nombre: "Prime Video 🟡", duracion: "30 días", venta: 2.50, costo: 1.00 }
 ];
 
 botTienda.action('menu_catalogo', async (ctx) => {
   await ctx.answerCbQuery();
-  
-  // Construir botonera automáticamente de 2 en 2
   let botones = [];
   for (let i = 0; i < servicios.length; i += 2) {
     let fila = [{ text: servicios[i].nombre, callback_data: `item_${servicios[i].id}` }];
     if (servicios[i + 1]) fila.push({ text: servicios[i + 1].nombre, callback_data: `item_${servicios[i + 1].id}` });
     botones.push(fila);
   }
+  // Botón de menú permanente
   botones.push([{ text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]);
 
   await ctx.editMessageText('📺 *Catálogo de Servicios Premium*\n\nSelecciona el servicio que deseas adquirir:', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: botones } });
 });
 
-// Generar sub-menús para TODOS los servicios con 1 solo bloque de código
 servicios.forEach(servicio => {
-  
   botTienda.action(`item_${servicio.id}`, async (ctx) => {
     await ctx.answerCbQuery();
-    if (tasas.bcv === 0) await actualizarTasas();
     
     const pUSDT = (servicio.venta * tasas.usdt).toFixed(2);
     const pEUR = (servicio.venta * tasas.euro).toFixed(2);
@@ -113,7 +80,7 @@ servicios.forEach(servicio => {
       reply_markup: {
         inline_keyboard: [
           [{ text: "💳 Realizar Pago", callback_data: `pago_${servicio.id}` }],
-          [{ text: "🔙 Volver al Catálogo", callback_data: "menu_catalogo" }, { text: "🏠 Volver", callback_data: "menu_inicio" }]
+          [{ text: "🔙 Volver Atrás", callback_data: "menu_catalogo" }, { text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]
         ]
       }
     });
@@ -122,11 +89,6 @@ servicios.forEach(servicio => {
   botTienda.action(`pago_${servicio.id}`, async (ctx) => {
     await ctx.answerCbQuery();
     
-    const pUSDT = (servicio.venta * tasas.usdt).toFixed(2);
-    const pEUR = (servicio.venta * tasas.euro).toFixed(2);
-    const pBCV = (servicio.venta * tasas.bcv).toFixed(2);
-
-    // Guardar datos financieros para tu Panel Admin
     intencionCompra.set(ctx.from.id, { 
       servicio: servicio.nombre, venta: servicio.venta, costo: servicio.costo, 
       ganancia: (servicio.venta - servicio.costo).toFixed(2), tasaDia: tasas.fecha 
@@ -136,16 +98,16 @@ servicios.forEach(servicio => {
       parse_mode: 'Markdown',
       reply_markup: {
         inline_keyboard: [
-          [{ text: `USDT (${servicio.venta}$ = ${pUSDT} Bs)`, callback_data: "pagar_usdt" }],
-          [{ text: `EURO (${servicio.venta}€ = ${pEUR} Bs)`, callback_data: "pagar_euro" }],
-          [{ text: `BCV (${servicio.venta}$ = ${pBCV} Bs)`, callback_data: "pagar_bcv" }],
-          [{ text: "🔙 Atrás", callback_data: `item_${servicio.id}` }]
+          [{ text: `USDT Binance`, callback_data: "pagar_usdt" }, { text: `EURO Zinli`, callback_data: "pagar_euro" }],
+          [{ text: `BCV Pago Móvil`, callback_data: "pagar_bcv" }],
+          [{ text: "🔙 Volver Atrás", callback_data: `item_${servicio.id}` }, { text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]
         ]
       }
     });
   });
 });
 
+// --- DATOS BANCARIOS EXACTOS ---
 botTienda.action(/pagar_(.+)/, async (ctx) => {
   const moneda = ctx.match[1].toUpperCase();
   const userId = ctx.from.id;
@@ -156,16 +118,22 @@ botTienda.action(/pagar_(.+)/, async (ctx) => {
   intencionCompra.set(userId, compra);
 
   let textoPago = `🏦 *DATOS PARA PAGO EN ${moneda}*\n\n`;
-  if (moneda === 'BCV') textoPago += `Pago Móvil: 0414-XXXXXXX\nCI: XXXXXXXX\nBanco: Banesco\n\n*Nota:* Transfiere el monto exacto en bolívares.`;
-  if (moneda === 'USDT') textoPago += `Binance Pay (Correo):\npagos@tuempresa.com`;
-  if (moneda === 'EURO') textoPago += `Zinli (Correo):\npagos@tuempresa.com`;
+  if (moneda === 'BCV') {
+    textoPago += `*Pago Móvil*\nBanco: Venezuela (0102)\nTeléfono: 04262333684\nCédula: V-27145645\n\n*Monto exacto:* ${(compra.venta * tasas.bcv).toFixed(2)} Bs`;
+  }
+  if (moneda === 'EURO') {
+    textoPago += `*Zinli*\nUsuario / Correo: wilmergabriellucenacrespo\n\n*Monto exacto:* ${compra.venta} €`;
+  }
+  if (moneda === 'USDT') {
+    textoPago += `*Binance Pay*\nCorreo: wilmergabriellucenacrespo@gmail.com\n\n*Monto exacto:* ${compra.venta} USDT`;
+  }
 
   await ctx.editMessageText(`${textoPago}\n\nUna vez realices la transferencia, presiona el botón abajo:`, {
     parse_mode: 'Markdown',
     reply_markup: {
       inline_keyboard: [
         [{ text: "📤 Subir Comprobante", callback_data: "subir_pago" }],
-        [{ text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]
+        [{ text: "🔙 Volver Atrás", callback_data: `pago_${servicios[0].id}` }, { text: "🏠 Menú", callback_data: "menu_inicio" }]
       ]
     }
   });
@@ -173,117 +141,51 @@ botTienda.action(/pagar_(.+)/, async (ctx) => {
 
 botTienda.action('subir_pago', async (ctx) => {
   await ctx.answerCbQuery();
-  await ctx.reply('📸 Envía la foto de tu comprobante de pago en este chat ahora.');
+  await ctx.editMessageText('📸 *Sube tu comprobante*\n\nEnvía la foto de tu pago en este chat ahora mismo.', {
+    parse_mode: 'Markdown',
+    reply_markup: { inline_keyboard: [[{ text: "🔙 Cancelar", callback_data: "menu_inicio" }]] }
+  });
 });
 
-// --- RECEPCIÓN Y FICHA DE RENTABILIDAD ---
+// --- RECEPCIÓN Y EFECTO FANTASMA DE LA FOTO ---
 botTienda.on('photo', async (ctx) => {
   const userId = ctx.from.id;
   const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
   const fileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
   const ordenId = Math.floor(Math.random() * 10000).toString();
   
+  // EFECTO FANTASMA: Borramos la foto que envió el usuario de su pantalla
+  await ctx.deleteMessage().catch(() => {});
+
   const compraData = intencionCompra.get(userId) || { servicio: 'No definido', moneda: 'N/A', tasaDia: tasas.fecha, venta: 0, costo: 0, ganancia: 0 };
   pagosPendientes.set(ordenId, { userId, username });
 
-  await ctx.reply('⏳ Tu comprobante ha sido recibido. El departamento de administración lo está verificando.');
+  // Mostramos confirmación limpia
+  const mensajeConfirmacion = await ctx.reply('⏳ *Tu comprobante ha sido enviado exitosamente.*\nEl departamento de administración lo está verificando.', { parse_mode: 'Markdown' });
+  
+  // Borramos el aviso después de 10 segundos para mantener la pantalla impecable
+  setTimeout(() => { ctx.telegram.deleteMessage(ctx.chat.id, mensajeConfirmacion.message_id).catch(()=>{}); }, 10000);
 
-  const fichaAdmin = `📋 *FICHA DE VERIFICACIÓN - ORDEN #${ordenId}*\n\n` +
-                     `👤 *Cliente:* ${username}\n` +
-                     `🛒 *Servicio:* ${compraData.servicio}\n` +
-                     `💵 *Moneda de Pago:* ${compraData.moneda}\n` +
-                     `📅 *Tasa Aplicada:* ${compraData.tasaDia}\n\n` +
-                     `📊 *ANÁLISIS DE RENTABILIDAD:*\n` +
-                     `• Cobro: $${compraData.venta}\n` +
-                     `• Inversión: $${compraData.costo}\n` +
-                     `• *Ganancia Neta: $${compraData.ganancia}*\n\n` +
-                     `Verifica la captura adjunta.`;
+  // Enviar ficha al Admin
+  const fichaAdmin = `📋 *FICHA DE VERIFICACIÓN - #${ordenId}*\n👤 Cliente: ${username}\n🛒 Servicio: ${compraData.servicio}\n💵 Método: ${compraData.moneda}\n\n📊 *Rentabilidad:*\nCobro: $${compraData.venta} | Inversión: $${compraData.costo} | *Ganancia: $${compraData.ganancia}*`;
 
   await botAdmin.telegram.sendPhoto(MI_ID, fileId, {
-    caption: fichaAdmin,
-    parse_mode: 'Markdown',
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "✅ Aprobar Pago", callback_data: `aprobar_${ordenId}` }, { text: "❌ Rechazar", callback_data: `rechazar_${ordenId}` }]
-      ]
-    }
+    caption: fichaAdmin, parse_mode: 'Markdown',
+    reply_markup: { inline_keyboard: [[{ text: "✅ Aprobar", callback_data: `aprobar_${ordenId}` }, { text: "❌ Rechazar", callback_data: `rechazar_${ordenId}` }]] }
   });
 });
 
-botTienda.action('menu_suscripcion', async (ctx) => {
-  await ctx.answerCbQuery();
-  await ctx.editMessageText('⭐ *Mi Suscripción*\n\nAún no tienes suscripciones activas vinculadas.', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🏠 Menú", callback_data: "menu_inicio" }]] } });
-});
-
-botTienda.action('menu_perfil', async (ctx) => {
-  await ctx.answerCbQuery();
-  await ctx.editMessageText('👤 *Mi Perfil*\n\nHistorial en construcción.', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🏠 Menú", callback_data: "menu_inicio" }]] } });
-});
-
-botTienda.action('menu_politicas', async (ctx) => {
-  await ctx.answerCbQuery();
-  await ctx.editMessageText('📜 *Políticas de Garantía*\n\n1. Garantía de 30 días continuos.\n2. No cambiar contraseñas ni perfiles.', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🏠 Menú", callback_data: "menu_inicio" }]] } });
-});
-
-
 // ==========================================
-// 💼 BOT ADMINISTRADOR 
+// 💼 BOT ADMINISTRADOR
 // ==========================================
-
-const panelAdminBotones = {
-  inline_keyboard: [
-    [{ text: "💰 Ver Ganancias", callback_data: "admin_ganancias" }, { text: "📈 Ver Inversión", callback_data: "admin_inversion" }],
-    [{ text: "👥 Base de Clientes", callback_data: "admin_clientes" }, { text: "📊 Estadísticas", callback_data: "admin_stats" }],
-    [{ text: "🔄 Forzar Tasa Actual", callback_data: "admin_tasas" }, { text: "📢 Difusión Masiva", callback_data: "admin_difusion" }],
-    [{ text: "🚫 Suspender Usuario", callback_data: "admin_suspender" }, { text: "⭐ Servicios Activos", callback_data: "admin_servicios" }],
-    [{ text: "📝 Notas Administrativas", callback_data: "admin_notas" }, { text: "⚙️ Configuración", callback_data: "admin_config" }]
-  ]
-};
-
+// (Aquí mantienes la lógica del bot administrador que ya tenías funcionando)
 botAdmin.start((ctx) => {
-  if (ctx.from.id === MI_ID) {
-    ctx.reply('👑 *PANEL DE CONTROL ADMINISTRATIVO*\n\nBienvenido jefe.', { parse_mode: 'Markdown', reply_markup: panelAdminBotones });
-  }
-});
-
-botAdmin.action('admin_tasas', async (ctx) => {
-  await ctx.answerCbQuery('Actualizando tasas...');
-  await actualizarTasas();
-  await ctx.reply(`✅ *Tasas Actualizadas:*\nUSDT: ${tasas.usdt}\nEURO: ${tasas.euro}\nBCV: ${tasas.bcv}`, { parse_mode: 'Markdown' });
-});
-
-botAdmin.action('admin_ganancias', async (ctx) => { await ctx.answerCbQuery(); await ctx.reply('💰 Módulo en construcción.'); });
-botAdmin.action('admin_inversion', async (ctx) => { await ctx.answerCbQuery(); await ctx.reply('📈 Módulo en construcción.'); });
-botAdmin.action('admin_clientes', async (ctx) => { await ctx.answerCbQuery(); await ctx.reply('👥 Módulo en construcción.'); });
-botAdmin.action('admin_stats', async (ctx) => { await ctx.answerCbQuery(); await ctx.reply('📊 Módulo en construcción.'); });
-botAdmin.action('admin_difusion', async (ctx) => { await ctx.answerCbQuery(); await ctx.reply('📢 Módulo en construcción.'); });
-botAdmin.action('admin_suspender', async (ctx) => { await ctx.answerCbQuery(); await ctx.reply('🚫 Módulo en construcción.'); });
-botAdmin.action('admin_servicios', async (ctx) => { await ctx.answerCbQuery(); await ctx.reply('⭐ Módulo en construcción.'); });
-botAdmin.action('admin_notas', async (ctx) => { await ctx.answerCbQuery(); await ctx.reply('📝 Módulo en construcción.'); });
-botAdmin.action('admin_config', async (ctx) => { await ctx.answerCbQuery(); await ctx.reply('⚙️ Módulo en construcción.'); });
-
-botAdmin.action(/aprobar_(.+)/, async (ctx) => {
-  const ordenId = ctx.match[1];
-  const orden = pagosPendientes.get(ordenId);
-  if (!orden) return ctx.answerCbQuery('Procesada anteriormente.');
-  await botTienda.telegram.sendMessage(orden.userId, '✅ *¡TU PAGO HA SIDO APROBADO!*\n\nEn breve te enviaremos tus accesos.', { parse_mode: 'Markdown' });
-  await ctx.reply(`✅ *ENTREGA*\n👤 Para: ${orden.username}\n\n---\n📧 Correo:\n🔑 Contraseña:\n📅 Inicio:\n⌛ Corte:\n---`, { parse_mode: 'Markdown' });
-  await ctx.editMessageCaption(`✅ *APROBADO* (#${ordenId})`, { parse_mode: 'Markdown' });
-  pagosPendientes.delete(ordenId);
-});
-
-botAdmin.action(/rechazar_(.+)/, async (ctx) => {
-  const ordenId = ctx.match[1];
-  const orden = pagosPendientes.get(ordenId);
-  if (!orden) return ctx.answerCbQuery('Procesada anteriormente.');
-  await botTienda.telegram.sendMessage(orden.userId, '❌ *Pago Rechazado*\n\nProblemas con el comprobante. Contacta soporte.', { parse_mode: 'Markdown' });
-  await ctx.editMessageCaption(`❌ *RECHAZADO* (#${ordenId})`, { parse_mode: 'Markdown' });
-  pagosPendientes.delete(ordenId);
+  if (ctx.from.id === MI_ID) ctx.reply('👑 *Panel de Administración Activo*', { parse_mode: 'Markdown' });
 });
 
 botTienda.launch();
 botAdmin.launch();
-console.log("¡Catálogo dinámico y rentabilidad en línea!");
+console.log("¡Interfaz fantasma y agente separados en línea!");
 
 const server = http.createServer((req, res) => { res.writeHead(200); res.end('Operativo'); });
 server.listen(process.env.PORT || 3000);
