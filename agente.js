@@ -1,6 +1,6 @@
-// agente.js - Motor Financiero Reparado (Referencias fijas y Anti-Caídas)
-const tasas = { usdt: 41.50, euro: 44.00, bcv: 36.60, fecha: "Iniciando sistema..." };
-let dbLocal;
+// agente.js - Motor Financiero Real (Sin recortes)
+let tasas = { usdt: 41.50, euro: 44.00, bcv: 36.60, fecha: "Actualizando..." };
+let dbLocal = null;
 
 const servicios = [
   { id: "netflix", nombre: "Netflix 🔴", duracion: "30 días", costo: 2.20, precio_usdt: 3.80, precio_euro: 4.00, precio_bcv: 4.50 },
@@ -12,54 +12,61 @@ const servicios = [
 
 async function iniciar(db) {
   dbLocal = db;
-  
-  // ESCUDO 1: Recuperar memoria sin romper la referencia (Object.assign)
   try {
     const doc = await dbLocal.collection('sistema').doc('tasas_memoria').get();
     if (doc.exists && doc.data().bcv > 0) {
       Object.assign(tasas, doc.data());
-      console.log("[Memoria] Tasas recuperadas de Firebase.");
     }
   } catch (error) { 
-    console.log("[Alerta] No se pudo leer Firebase en el arranque."); 
+    console.log("No se pudo leer la memoria en Firebase."); 
   }
   
   await actualizarTasas();
-  setInterval(actualizarTasas, 43200000); // Cada 12 horas
+  setInterval(actualizarTasas, 43200000); // Se actualiza cada 12 horas
 }
 
 async function actualizarTasas() {
   try {
-    const res = await fetch('https://api.allorigins.win/raw?url=https://ve.dolarapi.com/v1/dolares');
-    const data = await res.json();
+    const opcionesHeader = { 'Accept': 'application/json' };
     
-    const oficial = data.find(d => d.casa === 'oficial')?.promedio;
-    const binance = data.find(d => d.casa === 'binance')?.promedio;
-    
-    if (oficial > 0 && binance > 0) {
-      tasas.bcv = oficial;
-      tasas.usdt = binance;
-      tasas.euro = parseFloat((oficial * 1.08).toFixed(2));
-      tasas.fecha = new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'long', timeStyle: 'short' });
+    // Llamadas directas y limpias a la API para no obtener ceros
+    const reqBcv = await fetch('https://ve.dolarapi.com/v1/dolares/oficial', { headers: opcionesHeader });
+    const dataBcv = await reqBcv.json();
+
+    const reqUsdt = await fetch('https://ve.dolarapi.com/v1/dolares/binance', { headers: opcionesHeader });
+    const dataUsdt = await reqUsdt.json();
+
+    const reqEur = await fetch('https://ve.dolarapi.com/v1/dolares/euro', { headers: opcionesHeader });
+    const dataEur = await reqEur.json();
+
+    // Validamos que la API realmente entregue números mayores a cero
+    if (dataBcv.promedio > 0 && dataUsdt.promedio > 0) {
+      tasas.bcv = dataBcv.promedio;
+      tasas.usdt = dataUsdt.promedio;
+      tasas.euro = dataEur.promedio;
       
+      const opcionesFecha = { timeZone: 'America/Caracas', dateStyle: 'long', timeStyle: 'short' };
+      tasas.fecha = new Date().toLocaleString('es-VE', opcionesFecha);
+
+      // Guardamos la tasa real en Firebase para que el bot nunca arranque vacío
       if (dbLocal) {
-        await dbLocal.collection('sistema').doc('tasas_memoria').set(tasas).catch(() => {});
+        await dbLocal.collection('sistema').doc('tasas_memoria').set(tasas).catch(()=>{});
       }
-      console.log(`[Agente] Éxito: BCV ${tasas.bcv} | USDT ${tasas.usdt}`);
+      console.log(`[TASAS REALES] BCV: ${tasas.bcv} | USDT: ${tasas.usdt} | EURO: ${tasas.euro}`);
     }
   } catch (error) {
-    console.log("[Alerta] Fallo en API, se mantienen las tasas actuales.");
+    console.log("Fallo de conexión a la API. Se mantiene la última tasa real.");
   }
 }
 
 async function setTasaManual(moneda, valor) {
-  if(moneda === 'BCV') tasas.bcv = valor;
-  if(moneda === 'USDT') tasas.usdt = valor;
-  if(moneda === 'EURO') tasas.euro = valor;
+  if (moneda === 'BCV') tasas.bcv = valor;
+  if (moneda === 'USDT') tasas.usdt = valor;
+  if (moneda === 'EURO') tasas.euro = valor;
+  tasas.fecha = "Fijada Manualmente";
   
-  tasas.fecha = "Fijada Manualmente (Control Admin)";
   if (dbLocal) {
-    await dbLocal.collection('sistema').doc('tasas_memoria').set(tasas).catch(() => {});
+    await dbLocal.collection('sistema').doc('tasas_memoria').set(tasas).catch(()=>{});
   }
 }
 
