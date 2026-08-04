@@ -78,7 +78,6 @@ async function actualizarTasas() {
   
   const datos = await pedirAGoogle(LINK_GOOGLE);
   
-  // 👇 ESTA ES LA LÍNEA NUEVA PARA SABER LA VERDAD 👇
   console.log("📦 RESPUESTA DE GOOGLE:", datos);
 
   if (datos && datos.bcv > 0 && datos.binance > 0) {
@@ -97,6 +96,7 @@ async function actualizarTasas() {
     console.log("🚨 Falló la lectura (Los valores vinieron en cero). Se mantiene la tasa anterior.");
   }
 }
+
 async function setTasaManual(moneda, valor) {
   if (moneda === 'BCV') tasas.bcv = parseFloat(valor);
   if (moneda === 'USDT') tasas.usdt = parseFloat(valor);
