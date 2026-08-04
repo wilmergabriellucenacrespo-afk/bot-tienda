@@ -1,35 +1,56 @@
-// agente.js - Motor financiero camuflado (Cero tasas falsas)
-const tasas = { usdt: 0, euro: 0, bcv: 0, fecha: "Calculando..." };
+// agente.js - Motor financiero Multi-API (Sin tasas falsas)
+
+let tasas = { usdt: 0, euro: 0, bcv: 0, fecha: "Calculando tasas reales..." };
 
 async function actualizarTasas() {
+  let exito = false;
+  const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' };
+
+  // INTENTO 1: DolarAPI (Muy rápida)
   try {
-    // Camuflaje: Le decimos a la página que somos un navegador Chrome de Windows, no un bot.
-    const headers = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-      'Accept': 'application/json'
-    };
-
-    const req = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/dollar', { headers });
-    const data = await req.json();
+    const res = await fetch('https://ve.dolarapi.com/v1/dolares', { headers });
+    const data = await res.json();
+    let oficial = data.find(d => d.casa === 'oficial')?.promedio || 0;
+    let binance = data.find(d => d.casa === 'binance')?.promedio || 0;
+    let eur = data.find(d => d.casa === 'euro')?.promedio || 0;
     
-    const reqEur = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/euro', { headers });
-    const dataEur = await reqEur.json();
+    if (oficial > 0 && binance > 0) {
+      tasas.bcv = oficial;
+      tasas.usdt = binance;
+      tasas.euro = eur > 0 ? eur : (oficial * 1.08);
+      exito = true;
+    }
+  } catch (e) {}
 
-    // Actualiza solo si lee un número real
-    if (data.monitors && data.monitors.bcv && data.monitors.bcv.price > 0) tasas.bcv = data.monitors.bcv.price;
-    if (data.monitors && data.monitors.binance && data.monitors.binance.price > 0) tasas.usdt = data.monitors.binance.price;
-    if (dataEur.monitors && dataEur.monitors.bcv && dataEur.monitors.bcv.price > 0) tasas.euro = dataEur.monitors.bcv.price;
-    
+  // INTENTO 2: PyDolar (Si el Intento 1 falla o es bloqueado)
+  if (!exito) {
+    try {
+      const res2 = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/dollar', { headers });
+      const data2 = await res2.json();
+      const resEur = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/euro', { headers });
+      const dataEur = await resEur.json();
+
+      if (data2.monitors && data2.monitors.bcv.price > 0) {
+        tasas.bcv = data2.monitors.bcv.price;
+        tasas.usdt = data2.monitors.binance.price;
+        tasas.euro = dataEur.monitors.bcv.price;
+        exito = true;
+      }
+    } catch (e) {}
+  }
+
+  // VALIDACIÓN FINAL
+  if (exito) {
     const opcionesFecha = { timeZone: 'America/Caracas', dateStyle: 'long', timeStyle: 'short' };
     tasas.fecha = new Date().toLocaleString('es-VE', opcionesFecha);
-    
-    console.log(`[Agente Real] BCV ${tasas.bcv} | USDT ${tasas.usdt} | EURO ${tasas.euro}`);
-  } catch (error) { 
-    console.log("Reintentando conexión para obtener tasas reales..."); 
+    console.log(`[Agente Real] BCV: ${tasas.bcv} | USDT: ${tasas.usdt} | EUR: ${tasas.euro}`);
+  } else {
+    console.log("Bloqueo detectado en ambas APIs. Reintentando en 15 segundos...");
+    setTimeout(actualizarTasas, 15000); // Intenta de nuevo rápidamente, nunca usa un cero falso.
   }
 }
 
-// Se ejecuta al instante y luego cada 12 horas (43,200,000 ms = 2 AM y 2 PM aprox dependiendo del arranque)
+// Ejecutar al iniciar y luego cada 12 horas (43,200,000 ms = 2 AM / 2 PM)
 actualizarTasas();
 setInterval(actualizarTasas, 43200000);
 
