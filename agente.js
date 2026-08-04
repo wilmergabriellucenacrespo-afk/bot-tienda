@@ -1,38 +1,29 @@
-// agente.js - Motor financiero independiente
-const tasas = { 
-  usdt: 40.00, // Valores de respaldo por si la API falla
-  euro: 43.50, 
-  bcv: 36.60, 
-  fecha: "Verificando..." 
-};
+// agente.js - Motor financiero independiente (PyDolarVenezuela API)
+const tasas = { usdt: 0, euro: 0, bcv: 0, fecha: "Calculando..." };
 
 async function actualizarTasas() {
   try {
-    const [reqBcv, reqBinance, reqEuro] = await Promise.all([
-      fetch('https://ve.dolarapi.com/v1/dolares/oficial'),
-      fetch('https://ve.dolarapi.com/v1/dolares/binance'),
-      fetch('https://ve.dolarapi.com/v1/dolares/euro')
-    ]);
+    const req = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/dollar');
+    const data = await req.json();
     
-    const dataBcv = await reqBcv.json();
-    const dataBinance = await reqBinance.json();
-    const dataEuro = await reqEuro.json();
+    const reqEur = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/euro');
+    const dataEur = await reqEur.json();
 
-    // Solo actualiza si la API devuelve un número válido mayor a 0
-    if (dataBcv.promedio > 0) tasas.bcv = dataBcv.promedio;
-    if (dataBinance.promedio > 0) tasas.usdt = dataBinance.promedio;
-    if (dataEuro.promedio > 0) tasas.euro = dataEuro.promedio;
+    if (data.monitors && data.monitors.bcv) tasas.bcv = data.monitors.bcv.price;
+    if (data.monitors && data.monitors.binance) tasas.usdt = data.monitors.binance.price;
+    if (dataEur.monitors && dataEur.monitors.bcv) tasas.euro = dataEur.monitors.bcv.price;
     
-    const opcionesFecha = { timeZone: 'America/Caracas', dateStyle: 'short', timeStyle: 'short' };
+    const opcionesFecha = { timeZone: 'America/Caracas', dateStyle: 'long', timeStyle: 'short' };
     tasas.fecha = new Date().toLocaleString('es-VE', opcionesFecha);
     
-    console.log(`[Agente] Tasas actualizadas: BCV ${tasas.bcv} | USDT ${tasas.usdt}`);
+    console.log(`[Agente] Tasas actualizadas: BCV ${tasas.bcv} | USDT ${tasas.usdt} | EURO ${tasas.euro}`);
   } catch (error) { 
-    console.log("Advertencia: No se pudo conectar a la API, usando tasas de respaldo."); 
+    console.log("Error de red en la API de tasas. Reintentando en el próximo ciclo."); 
   }
 }
 
+// Se ejecuta al instante y luego cada 12 horas (43,200,000 ms)
 actualizarTasas();
-setInterval(actualizarTasas, 43200000); // Se actualiza cada 12 horas
+setInterval(actualizarTasas, 43200000);
 
 module.exports = { tasas, actualizarTasas };
