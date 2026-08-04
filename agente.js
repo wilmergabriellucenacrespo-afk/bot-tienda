@@ -1,4 +1,4 @@
-// agente.js - Motor Financiero (Inmune a caídas de Render)
+// agente.js - Motor Financiero (Con Sistema Anti-Bloqueos Proxy)
 const https = require('https');
 
 let tasas = { usdt: 0, euro: 0, bcv: 0, fecha: "Actualizando..." };
@@ -12,8 +12,8 @@ const servicios = [
   { id: "prime", nombre: "Prime Video 🟡", duracion: "30 días", costo: 0.90, precio_usdt: 2.00, precio_euro: 2.20, precio_bcv: 2.50 }
 ];
 
-// Reemplazamos "fetch" por el módulo nativo de Node para que Render no crashee
-function peticionAPI(url) {
+// Función para hacer la petición HTTPS
+function hacerGet(url) {
   return new Promise((resolve) => {
     const opciones = {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
@@ -25,11 +25,24 @@ function peticionAPI(url) {
         try {
           resolve(JSON.parse(data));
         } catch (e) {
-          resolve(null); // Si hay bloqueo de seguridad, devuelve null pero NO crashea
+          resolve(null);
         }
       });
     }).on('error', () => resolve(null));
   });
+}
+
+// Función que intenta la conexión directa y luego usa Proxies para evadir a Cloudflare
+async function peticionAPI(urlBase) {
+  // Intentamos primero con un Proxy gratuito para ocultar la IP de Render
+  const urlProxy = `https://api.codetabs.com/v1/proxy?quest=${urlBase}`;
+  
+  let resultado = await hacerGet(urlProxy);
+  if (resultado) return resultado;
+
+  // Si el proxy falla, intentamos la conexión directa
+  resultado = await hacerGet(urlBase);
+  return resultado;
 }
 
 async function iniciar(db) {
@@ -48,7 +61,7 @@ async function iniciar(db) {
 }
 
 async function actualizarTasas() {
-  console.log("🔄 Buscando tasas en el mercado...");
+  console.log("🔄 Buscando tasas usando Servidores Proxy...");
   let precioBcv = 0, precioBinance = 0, precioEuro = 0;
 
   // INTENTO 1: PyDolar
@@ -62,9 +75,9 @@ async function actualizarTasas() {
     precioEuro = dataPyEur.monitors?.bcv?.price || dataPyEur.bcv?.price || 0;
   }
 
-  // INTENTO 2: DolarAPI (Respaldo)
+  // INTENTO 2: DolarAPI
   if (precioBcv === 0) {
-    console.log("⚠️ PyDolar no respondió. Intentando con DolarAPI...");
+    console.log("⚠️ Proxy con PyDolar falló. Intentando Proxy con DolarAPI...");
     const resBcv = await peticionAPI('https://ve.dolarapi.com/v1/dolares/oficial');
     if (resBcv) precioBcv = resBcv.promedio || 0;
 
@@ -87,7 +100,7 @@ async function actualizarTasas() {
     if (dbLocal) await dbLocal.collection('sistema').doc('tasas_memoria').set(tasas).catch(()=>{});
     console.log(`✅ [TASAS ACTUALIZADAS] BCV: ${tasas.bcv} | USDT: ${tasas.usdt} | EURO: ${tasas.euro}`);
   } else {
-    console.log("🚨 ALERTA: Render está bloqueado por las APIs.");
+    console.log("🚨 ALERTA: Render y el Proxy están bloqueados. Usa los comandos manuales en Telegram.");
   }
 }
 
