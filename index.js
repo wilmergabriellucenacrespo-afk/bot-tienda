@@ -24,7 +24,22 @@ bot.start((ctx) => {
     }
   });
 });
+// --- SISTEMA DE RECEPCIÓN DE PAGOS ---
+const ADMIN_ID = 8264753970; // Tu ID de administrador
 
+bot.on('photo', async (ctx) => {
+  const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
+  
+  // 1. Respuesta automática para el cliente
+  await ctx.reply('📸 ¡Comprobante recibido exitosamente!\n\nEstamos verificando el pago. En breve te enviaremos los datos de acceso por aquí mismo. ⏳');
+
+  // 2. Alerta silenciosa para ti (Administrador)
+  await ctx.telegram.sendPhoto(ADMIN_ID, ctx.message.photo[ctx.message.photo.length - 1].file_id, {
+    caption: `💰 *NUEVO PAGO RECIBIDO*\n\n👤 Cliente: ${username}\n\nRevisa el comprobante. Si todo está correcto, escríbele para entregarle su cuenta.`,
+    parse_mode: 'Markdown'
+  });
+});
+// --------------------------------------
 // 4. Mantener el bot encendido
 bot.launch();
 console.log("¡El servidor del bot está encendido y funcionando!");
