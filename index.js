@@ -40,44 +40,35 @@ botTienda.action('menu_inicio', async (ctx) => {
   await ctx.editMessageText('📺 *Menú Principal*\nSelecciona una opción:', { parse_mode: 'Markdown', reply_markup: menuPrincipal });
 });
 
-// --- FUNCIONES DE BOTONES PRINCIPALES ---
 botTienda.action('menu_perfil', async (ctx) => {
   await ctx.answerCbQuery();
   const nombre = ctx.from.first_name || "Usuario";
   await ctx.editMessageText(`👤 *MI PERFIL*\n\n*Nombre:* ${nombre}\n*ID Sistema:* \`${ctx.from.id}\`\n*Estado:* Activo ✅\n\n_Tus datos están protegidos bajo nuestras normas de privacidad._`, {
-    parse_mode: 'Markdown',
-    reply_markup: { inline_keyboard: [[{ text: "🔙 Volver al Menú", callback_data: "menu_inicio" }]] }
+    parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Volver al Menú", callback_data: "menu_inicio" }]] }
   });
 });
 
 botTienda.action('menu_suscripcion', async (ctx) => {
   await ctx.answerCbQuery();
-  await ctx.editMessageText(`⭐ *MIS SUSCRIPCIONES*\n\nActualmente no posees servicios activos registrados en nuestra base de datos.\n\nDirígete a nuestro catálogo para adquirir tu primera cuenta premium.`, {
-    parse_mode: 'Markdown',
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: "🛒 Ir al Catálogo", callback_data: "menu_catalogo" }],
-        [{ text: "🔙 Volver al Menú", callback_data: "menu_inicio" }]
-      ]
-    }
+  await ctx.editMessageText(`⭐ *MIS SUSCRIPCIONES*\n\nActualmente no posees servicios activos registrados en nuestra base de datos.`, {
+    parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🛒 Ir al Catálogo", callback_data: "menu_catalogo" }], [{ text: "🔙 Volver al Menú", callback_data: "menu_inicio" }]] }
   });
 });
 
 botTienda.action('menu_politicas', async (ctx) => {
   await ctx.answerCbQuery();
-  await ctx.editMessageText(`📜 *POLÍTICAS Y GARANTÍAS*\n\n1️⃣ *Garantía Total:* Todos nuestros servicios cuentan con soporte y garantía durante los días contratados.\n2️⃣ *Reglas de Cuentas:* Queda estrictamente prohibido cambiar contraseñas, correos o perfiles asignados. Hacerlo anula la garantía de forma inmediata y permanente.\n3️⃣ *Responsabilidad:* Las caídas generales de plataforma son ajenas a nosotros, pero garantizamos la reposición de días perdidos una vez restablecido el servicio.\n4️⃣ *Pagos:* Todo servicio se entrega únicamente después de verificar el comprobante de pago exitoso.\n\n_Tu compra implica la aceptación de estos términos._`, {
-    parse_mode: 'Markdown',
-    reply_markup: { inline_keyboard: [[{ text: "🔙 Volver al Menú", callback_data: "menu_inicio" }]] }
+  await ctx.editMessageText(`📜 *POLÍTICAS Y GARANTÍAS*\n\n1️⃣ *Garantía Total:* Todos nuestros servicios cuentan con soporte.\n2️⃣ *Reglas de Cuentas:* Queda estrictamente prohibido cambiar contraseñas. Hacerlo anula la garantía de forma inmediata.\n3️⃣ *Pagos:* Todo servicio se entrega únicamente después de verificar el comprobante de pago exitoso.\n\n_Tu compra implica la aceptación de estos términos._`, {
+    parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Volver al Menú", callback_data: "menu_inicio" }]] }
   });
 });
 
-// --- CATÁLOGO DE SERVICIOS Y PRECIOS ---
+// --- CATÁLOGO CON PRECIOS SEPARADOS POR MONEDA ---
 const servicios = [
-  { id: "netflix", nombre: "Netflix 🔴", duracion: "30 días", venta: 4.00, costo: 2.00 },
-  { id: "spotify", nombre: "Spotify Premium 🟢", duracion: "30 días", venta: 2.50, costo: 1.00 },
-  { id: "disney", nombre: "Disney+ 🔵", duracion: "30 días", venta: 3.00, costo: 1.50 },
-  { id: "max", nombre: "Max (HBO) 🟣", duracion: "30 días", venta: 3.00, costo: 1.50 },
-  { id: "prime", nombre: "Prime Video 🟡", duracion: "30 días", venta: 2.50, costo: 1.00 }
+  { id: "netflix", nombre: "Netflix 🔴", duracion: "30 días", precio_usdt: 4.00, precio_euro: 5.00, precio_bcv: 6.00, costo: 2.00 },
+  { id: "spotify", nombre: "Spotify Premium 🟢", duracion: "30 días", precio_usdt: 2.50, precio_euro: 3.50, precio_bcv: 4.00, costo: 1.00 },
+  { id: "disney", nombre: "Disney+ 🔵", duracion: "30 días", precio_usdt: 3.00, precio_euro: 4.00, precio_bcv: 5.00, costo: 1.50 },
+  { id: "max", nombre: "Max (HBO) 🟣", duracion: "30 días", precio_usdt: 3.00, precio_euro: 4.00, precio_bcv: 5.00, costo: 1.50 },
+  { id: "prime", nombre: "Prime Video 🟡", duracion: "30 días", precio_usdt: 2.50, precio_euro: 3.50, precio_bcv: 4.00, costo: 1.00 }
 ];
 
 botTienda.action('menu_catalogo', async (ctx) => {
@@ -89,7 +80,6 @@ botTienda.action('menu_catalogo', async (ctx) => {
     botones.push(fila);
   }
   botones.push([{ text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]);
-
   await ctx.editMessageText('📺 *Catálogo de Servicios Premium*\n\nSelecciona el servicio que deseas adquirir:', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: botones } });
 });
 
@@ -97,28 +87,27 @@ servicios.forEach(servicio => {
   botTienda.action(`item_${servicio.id}`, async (ctx) => {
     await ctx.answerCbQuery();
     
-    // Si la tasa es 0, intentamos forzar una lectura de emergencia
     if (agente.tasas.bcv === 0) await agente.actualizarTasas();
 
     const tUSDT = agente.tasas.usdt.toFixed(2);
     const tEUR = agente.tasas.euro.toFixed(2);
     const tBCV = agente.tasas.bcv.toFixed(2);
 
-    const pUSDT = (servicio.venta * agente.tasas.usdt).toFixed(2);
-    const pEUR = (servicio.venta * agente.tasas.euro).toFixed(2);
-    const pBCV = (servicio.venta * agente.tasas.bcv).toFixed(2);
+    const pUSDT = (servicio.precio_usdt * agente.tasas.usdt).toFixed(2);
+    const pEUR = (servicio.precio_euro * agente.tasas.euro).toFixed(2);
+    const pBCV = (servicio.precio_bcv * agente.tasas.bcv).toFixed(2);
 
     const textoServicio = `*${servicio.nombre}*\n\n` +
       `⏳ *Duración:* ${servicio.duracion}\n` +
       `📅 *Fecha:* ${agente.tasas.fecha}\n\n` +
-      `📈 *VALOR DE 1 DÓLAR HOY:*\n` +
-      `• BCV: ${tBCV} Bs\n` +
+      `📈 *VALOR DE 1 DÓLAR/EURO HOY:*\n` +
+      `• Oficial (BCV): ${tBCV} Bs\n` +
       `• Binance (USDT): ${tUSDT} Bs\n` +
       `• Euro: ${tEUR} Bs\n\n` +
       `💵 *PRECIO DEL SERVICIO AL CAMBIO:*\n` +
-      `• VES (BCV ${servicio.venta}$): *${pBCV} Bs*\n` +
-      `• USDT (${servicio.venta}$): *${pUSDT} Bs*\n` +
-      `• EUR (${servicio.venta}€): *${pEUR} Bs*\n\n` +
+      `• BCV (${servicio.precio_bcv}$): *${pBCV} Bs*\n` +
+      `• USDT (${servicio.precio_usdt}$): *${pUSDT} Bs*\n` +
+      `• EUR (${servicio.precio_euro}€): *${pEUR} Bs*\n\n` +
       `Si deseas adquirir este servicio, selecciona realizar pago:`;
 
     await ctx.editMessageText(textoServicio, {
@@ -126,7 +115,7 @@ servicios.forEach(servicio => {
       reply_markup: {
         inline_keyboard: [
           [{ text: "💳 Realizar Pago", callback_data: `pago_${servicio.id}` }],
-          [{ text: "🔙 Volver Atrás", callback_data: "menu_catalogo" }, { text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]
+          [{ text: "🔙 Volver Atrás", callback_data: "menu_catalogo" }, { text: "🏠 Menú", callback_data: "menu_inicio" }]
         ]
       }
     });
@@ -136,8 +125,12 @@ servicios.forEach(servicio => {
     await ctx.answerCbQuery();
     
     intencionCompra.set(ctx.from.id, { 
-      servicio: servicio.nombre, venta: servicio.venta, costo: servicio.costo, 
-      ganancia: (servicio.venta - servicio.costo).toFixed(2), tasaDia: agente.tasas.fecha 
+      servicio: servicio.nombre, 
+      costo: servicio.costo, 
+      precio_usdt: servicio.precio_usdt,
+      precio_euro: servicio.precio_euro,
+      precio_bcv: servicio.precio_bcv,
+      tasaDia: agente.tasas.fecha 
     });
 
     await ctx.editMessageText(`💳 *SELECCIONA TU MÉTODO DE PAGO*\n\nServicio: ${servicio.nombre}\n\nSelecciona la moneda y plataforma que utilizarás para transferir:`, {
@@ -146,7 +139,7 @@ servicios.forEach(servicio => {
         inline_keyboard: [
           [{ text: `USDT Binance`, callback_data: "pagar_usdt" }, { text: `EURO Zinli`, callback_data: "pagar_euro" }],
           [{ text: `BCV Pago Móvil`, callback_data: "pagar_bcv" }],
-          [{ text: "🔙 Volver Atrás", callback_data: `item_${servicio.id}` }, { text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]
+          [{ text: "🔙 Volver Atrás", callback_data: `item_${servicio.id}` }, { text: "🏠 Menú", callback_data: "menu_inicio" }]
         ]
       }
     });
@@ -160,17 +153,36 @@ botTienda.action(/pagar_(.+)/, async (ctx) => {
 
   let compra = intencionCompra.get(userId) || {};
   compra.moneda = moneda;
+  
+  let montoDivisa = 0;
+  let montoBs = 0;
+
+  if (moneda === 'BCV') {
+    montoDivisa = compra.precio_bcv;
+    montoBs = (compra.precio_bcv * agente.tasas.bcv).toFixed(2);
+    compra.venta = compra.precio_bcv;
+  } else if (moneda === 'EURO') {
+    montoDivisa = compra.precio_euro;
+    montoBs = (compra.precio_euro * agente.tasas.euro).toFixed(2);
+    compra.venta = compra.precio_euro;
+  } else if (moneda === 'USDT') {
+    montoDivisa = compra.precio_usdt;
+    montoBs = (compra.precio_usdt * agente.tasas.usdt).toFixed(2);
+    compra.venta = compra.precio_usdt;
+  }
+
+  compra.ganancia = (compra.venta - compra.costo).toFixed(2);
   intencionCompra.set(userId, compra);
 
   let textoPago = `🏦 *DATOS PARA PAGO EN ${moneda}*\n\n`;
   if (moneda === 'BCV') {
-    textoPago += `*Pago Móvil*\nBanco: Venezuela (0102)\nTeléfono: 04262333684\nCédula: V-27145645\n\n*Monto exacto:* ${(compra.venta * agente.tasas.bcv).toFixed(2)} Bs`;
+    textoPago += `*Pago Móvil*\nBanco: Venezuela (0102)\nTeléfono: 04262333684\nCédula: V-27145645\n\n💵 *Monto Base:* ${montoDivisa} $\n🇻🇪 *MONTO A TRANSFERIR:* ${montoBs} Bs`;
   }
   if (moneda === 'EURO') {
-    textoPago += `*Zinli*\nUsuario: wilmergabriellucenacrespo\n\n*Monto exacto:* ${compra.venta} €`;
+    textoPago += `*Zinli*\nUsuario: wilmergabriellucenacrespo\n\n💵 *Monto Base:* ${montoDivisa} €\n🇻🇪 *Equivalente:* ${montoBs} Bs\n\n*MONTO A TRANSFERIR:* ${montoDivisa} €`;
   }
   if (moneda === 'USDT') {
-    textoPago += `*Binance Pay*\nCorreo: wilmergabriellucenacrespo@gmail.com\n\n*Monto exacto:* ${compra.venta} USDT`;
+    textoPago += `*Binance Pay*\nCorreo: wilmergabriellucenacrespo@gmail.com\n\n💵 *Monto Base:* ${montoDivisa} USDT\n🇻🇪 *Equivalente:* ${montoBs} Bs\n\n*MONTO A TRANSFERIR:* ${montoDivisa} USDT`;
   }
 
   await ctx.editMessageText(`${textoPago}\n\nUna vez realices la transferencia, presiona el botón para enviar tu capture:`, {
@@ -192,7 +204,6 @@ botTienda.action('subir_pago', async (ctx) => {
   });
 });
 
-// --- RECEPCIÓN Y NAVEGACIÓN CONSTANTE ---
 botTienda.on('photo', async (ctx) => {
   const userId = ctx.from.id;
   const username = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
@@ -222,7 +233,6 @@ botTienda.on('photo', async (ctx) => {
   });
 });
 
-
 // ==========================================
 // 💼 BOT ADMINISTRADOR (PANEL OPERATIVO)
 // ==========================================
@@ -246,20 +256,19 @@ botAdmin.action('admin_tasas', async (ctx) => {
 
 botAdmin.action('admin_ganancias', async (ctx) => {
   await ctx.answerCbQuery();
-  await ctx.reply('💰 *Módulo de Ganancias*\n\nEsta sección totalizará automáticamente tus ganancias basándose en los pagos aprobados (Próxima actualización con Firebase).', { parse_mode: 'Markdown' });
+  await ctx.reply('💰 *Módulo de Ganancias*\n\nEsta sección totalizará automáticamente tus ganancias basándose en los pagos aprobados.', { parse_mode: 'Markdown' });
 });
 
 botAdmin.action('admin_clientes', async (ctx) => {
   await ctx.answerCbQuery();
-  await ctx.reply('👥 *Base de Clientes*\n\nAquí verás el registro de usuarios y sus días restantes (Próxima actualización con Firebase).', { parse_mode: 'Markdown' });
+  await ctx.reply('👥 *Base de Clientes*\n\nAquí verás el registro de usuarios y sus días restantes.', { parse_mode: 'Markdown' });
 });
 
 botAdmin.action('admin_config', async (ctx) => {
   await ctx.answerCbQuery();
-  await ctx.reply('⚙️ *Configuración del Sistema*\n\nPanel de ajustes y modificación de cuentas (Próxima actualización).', { parse_mode: 'Markdown' });
+  await ctx.reply('⚙️ *Configuración del Sistema*\n\nPanel de ajustes y modificación de cuentas.', { parse_mode: 'Markdown' });
 });
 
-// --- LÓGICA DE APROBACIÓN Y ENTREGA ---
 botAdmin.action(/aprobar_(.+)/, async (ctx) => {
   const ordenId = ctx.match[1];
   const orden = pagosPendientes.get(ordenId);
@@ -288,7 +297,7 @@ botAdmin.action(/rechazar_(.+)/, async (ctx) => {
 
 botTienda.launch();
 botAdmin.launch();
-console.log("¡Sistema completo, 100% funcional y actualizado en línea!");
+console.log("¡Sistema completo con camuflaje de tasas en línea!");
 
 const server = http.createServer((req, res) => { res.writeHead(200); res.end('Operativo al máximo nivel'); });
 server.listen(process.env.PORT || 3000);
