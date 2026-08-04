@@ -1,53 +1,48 @@
 const { Telegraf, session } = require('telegraf');
 const admin = require('firebase-admin');
 const http = require('http');
- 
+
 // --- 1. CONEXIÓN A BASE DE DATOS ---
 const serviceAccount = JSON.parse(process.env.FIREBASE_JSON);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
- 
+
 // --- 2. INICIALIZAR AMBOS BOTS ---
 const botTienda = new Telegraf(process.env.TELEGRAM_TOKEN);
-const botAdmin = new Telegraf(process.env.ADMIN_TOKEN); // Tu nuevo bot
-const MI_ID = 8264753970; // Tu ID
+const botAdmin = new Telegraf(process.env.ADMIN_TOKEN);
+const MI_ID = 8264753970;
 
 const pagosPendientes = new Map();
 
 // ==========================================
-// 🛒 BOT TIENDA (Para clientes y tus pruebas)
+// 🛒 BOT TIENDA (Para clientes)
 // ==========================================
 botTienda.use(session());
 
 botTienda.start(async (ctx) => {
   ctx.session = ctx.session || {};
+  
+  // Si no está registrado, pide todos los datos en un solo mensaje
   if (!ctx.session.registrado) {
-    ctx.session.paso = 'nombre';
-    return ctx.reply('👋 ¡Bienvenido a la Tienda!\n\nPor favor, escribe tu *Nombre y Apellido*:', { parse_mode: 'Markdown' });
+    return ctx.reply('👋 ¡Bienvenido a la Tienda!\n\nPara poder ofrecerte nuestros servicios, por favor envía tus datos en *un solo mensaje*, uno debajo del otro, de esta forma:\n\nJuan Perez\nV-12345678\n0414-1234567', { parse_mode: 'Markdown' });
   }
   mostrarMenuPrincipal(ctx);
 });
 
+// Capturador del mensaje único de registro
 botTienda.on('text', async (ctx, next) => {
   ctx.session = ctx.session || {};
-  if (ctx.session.paso === 'nombre') {
-    ctx.session.nombre = ctx.message.text;
-    ctx.session.paso = 'cedula';
-    return ctx.reply('Perfecto. Ahora ingresa tu *Cédula*:');
-  }
-  if (ctx.session.paso === 'cedula') {
-    ctx.session.cedula = ctx.message.text;
-    ctx.session.paso = 'telefono';
-    return ctx.reply('Por último, ingresa tu *Teléfono*:');
-  }
-  if (ctx.session.paso === 'telefono') {
-    ctx.session.telefono = ctx.message.text;
-    ctx.session.paso = 'completado';
+  
+  // Si el usuario no está registrado, asumimos que su primer mensaje de texto son sus datos
+  if (!ctx.session.registrado) {
+    ctx.session.datosUsuario = ctx.message.text; // Guardamos todo el bloque de texto
     ctx.session.registrado = true;
-    await ctx.reply('✅ ¡Registro exitoso!');
+    
+    await ctx.reply('✅ ¡Registro exitoso! Ya puedes usar la plataforma.');
     return mostrarMenuPrincipal(ctx);
   }
-  return next();
+  
+  return next(); // Si ya está registrado, ignora esto y permite que funcionen otras cosas
 });
 
 function mostrarMenuPrincipal(ctx) {
@@ -62,7 +57,7 @@ function mostrarMenuPrincipal(ctx) {
   });
 }
 
-// (Aquí luego agregaremos tu lógica del agente de tasas y catálogo)
+// (Aquí luego integraremos tu lógica del agente de tasas y el catálogo completo)
 
 botTienda.action('menu_pagos', async (ctx) => {
   await ctx.answerCbQuery();
@@ -88,7 +83,7 @@ botTienda.on('photo', async (ctx) => {
 
   await ctx.reply('⏳ Tu comprobante ha sido recibido y está en revisión.');
 
-  // LA MAGIA: La tienda le envía el comprobante a tu Bot Administrador
+  // La tienda le envía el comprobante a tu Bot Administrador
   await botAdmin.telegram.sendPhoto(MI_ID, fileId, {
     caption: `🔔 *NUEVA SOLICITUD DE PAGO*\n👤 Cliente: ${username}\n🔖 Orden: #${ordenId}`,
     parse_mode: 'Markdown',
@@ -129,7 +124,6 @@ botAdmin.action(/aprobar_(.+)/, async (ctx) => {
 });
 
 botAdmin.action(/rechazar_(.+)/, async (ctx) => {
-    // Lógica para rechazar
     await ctx.answerCbQuery('Pago rechazado');
 });
 
@@ -138,7 +132,7 @@ botAdmin.action(/rechazar_(.+)/, async (ctx) => {
 // ==========================================
 botTienda.launch();
 botAdmin.launch();
-console.log("¡Ambos bots están en línea y conectados!");
+console.log("¡Ambos bots están en línea! Registro de un solo paso activado.");
 
 const server = http.createServer((req, res) => { res.writeHead(200); res.end('Sistema Dual Operativo'); });
 server.listen(process.env.PORT || 3000);
