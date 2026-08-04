@@ -1,7 +1,7 @@
 const { Telegraf, session } = require('telegraf');
 const admin = require('firebase-admin');
 const http = require('http');
-
+ 
 // --- 1. CONEXIÓN A BASE DE DATOS ---
 const serviceAccount = JSON.parse(process.env.FIREBASE_JSON);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
