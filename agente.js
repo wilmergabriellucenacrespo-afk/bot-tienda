@@ -1,4 +1,4 @@
-// agente.js - Motor Financiero Real (Sin recortes)
+// agente.js - Motor Financiero Real (Corregido y Optimizado)
 let tasas = { usdt: 41.50, euro: 44.00, bcv: 36.60, fecha: "Actualizando..." };
 let dbLocal = null;
 
@@ -18,7 +18,7 @@ async function iniciar(db) {
       Object.assign(tasas, doc.data());
     }
   } catch (error) { 
-    console.log("No se pudo leer la memoria en Firebase."); 
+    console.log("No se pudo leer la memoria en Firebase. Error:", error.message); 
   }
   
   await actualizarTasas();
@@ -27,35 +27,38 @@ async function iniciar(db) {
 
 async function actualizarTasas() {
   try {
-    const opcionesHeader = { 'Accept': 'application/json' };
-    
-    // Llamadas directas y limpias a la API para no obtener ceros
-    const reqBcv = await fetch('https://ve.dolarapi.com/v1/dolares/oficial', { headers: opcionesHeader });
-    const dataBcv = await reqBcv.json();
+    // Usamos la API PyDolarVenezuela (la más estable actualmente para VE)
+    const reqDolar = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/dollar/monitors');
+    const dataDolar = await reqDolar.json();
 
-    const reqUsdt = await fetch('https://ve.dolarapi.com/v1/dolares/binance', { headers: opcionesHeader });
-    const dataUsdt = await reqUsdt.json();
+    const reqEuro = await fetch('https://pydolarvenezuela-api.vercel.app/api/v1/euro/monitors');
+    const dataEuro = await reqEuro.json();
 
-    const reqEur = await fetch('https://ve.dolarapi.com/v1/dolares/euro', { headers: opcionesHeader });
-    const dataEur = await reqEur.json();
+    // Extraemos los precios directamente (la API usa 'price' en lugar de 'promedio')
+    const precioBcv = dataDolar.bcv?.price;
+    const precioBinance = dataDolar.binance?.price;
+    const precioEuro = dataEuro.bcv?.price; // Tasa oficial del euro en BCV
 
-    // Validamos que la API realmente entregue números mayores a cero
-    if (dataBcv.promedio > 0 && dataUsdt.promedio > 0) {
-      tasas.bcv = dataBcv.promedio;
-      tasas.usdt = dataUsdt.promedio;
-      tasas.euro = dataEur.promedio;
+    // Validamos que la API entregue números mayores a cero
+    if (precioBcv > 0 && precioBinance > 0) {
+      tasas.bcv = precioBcv;
+      tasas.usdt = precioBinance;
+      tasas.euro = precioEuro || tasas.euro; // Fallback de seguridad
       
       const opcionesFecha = { timeZone: 'America/Caracas', dateStyle: 'long', timeStyle: 'short' };
       tasas.fecha = new Date().toLocaleString('es-VE', opcionesFecha);
 
-      // Guardamos la tasa real en Firebase para que el bot nunca arranque vacío
+      // Guardamos la tasa real en Firebase
       if (dbLocal) {
         await dbLocal.collection('sistema').doc('tasas_memoria').set(tasas).catch(()=>{});
       }
       console.log(`[TASAS REALES] BCV: ${tasas.bcv} | USDT: ${tasas.usdt} | EURO: ${tasas.euro}`);
+    } else {
+      console.log("La API devolvió valores inválidos. Se mantiene la última tasa de memoria.");
     }
   } catch (error) {
-    console.log("Fallo de conexión a la API. Se mantiene la última tasa real.");
+    // AHORA imprimimos el error. Si fetch no existe o la red cae, lo sabrás de inmediato.
+    console.log("Fallo de conexión a la API. Error real:", error.message);
   }
 }
 
