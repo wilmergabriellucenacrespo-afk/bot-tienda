@@ -1,5 +1,6 @@
 const { Telegraf } = require('telegraf');
 const admin = require('firebase-admin');
+const http = require('http'); // EL TRUCO: Importamos un servidor web
 
 // 1. Conectar con la Base de Datos (Firebase)
 const serviceAccount = JSON.parse(process.env.FIREBASE_JSON);
@@ -20,6 +21,14 @@ bot.start((ctx) => {
 bot.launch();
 console.log("¡El servidor del bot está encendido y funcionando!");
 
-// Detener el bot de forma segura si se cierra Replit
+// 5. EL TRUCO: Crear un puerto web falso para que Render esté feliz
+const server = http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end('El servidor del bot de Telegram esta funcionando al 100%');
+});
+// Render usa la variable process.env.PORT automáticamente
+server.listen(process.env.PORT || 3000);
+
+// Detener el bot de forma segura
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
