@@ -20,6 +20,7 @@ const MI_ID = 8264753970;
 
 const pagosPendientes = new Map();
 const intencionCompra = new Map();
+const adminEsperandoDatos = new Map(); // NUEVO: Control para autocompletado de cuentas
 
 // ==========================================
 // 🛒 BOT TIENDA (TODO RESTAURADO)
@@ -36,6 +37,16 @@ const menuPrincipal = {
 
 botTienda.start(async (ctx) => {
   await ctx.deleteMessage().catch(() => {});
+  
+  // REGISTRO SILENCIOSO DE USUARIO EN FIREBASE AL INICIAR
+  const userRef = db.collection('usuarios').doc(ctx.from.id.toString());
+  await userRef.set({
+    id: ctx.from.id,
+    nombre: ctx.from.first_name,
+    username: ctx.from.username || 'Sin Username',
+    ultimo_inicio: new Date().toISOString()
+  }, { merge: true }).catch(()=>{});
+
   const bienvenida = `👋 ¡Hola ${ctx.from.first_name}! Bienvenido a tu proveedor de confianza.\n\nOfrecemos servicios de entretenimiento digital de **alta calidad** a precios competitivos. Trabajamos bajo los más estrictos valores de transparencia, asegurando soporte continuo y responsabilidad.\n\nSelecciona una opción para comenzar:`;
   await ctx.reply(bienvenida, { parse_mode: 'Markdown', reply_markup: menuPrincipal }).catch(()=>{});
 });
@@ -55,9 +66,28 @@ botTienda.action('menu_perfil', async (ctx) => {
   }).catch(()=>{});
 });
 
+// NUEVA LÓGICA: Leer suscripciones reales desde Firebase
 botTienda.action('menu_suscripcion', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
-  await ctx.editMessageText(`⭐ *MIS SUSCRIPCIONES*\n\nActualmente no posees servicios activos. Ve a nuestro catálogo para realizar tu primera compra.`, {
+  
+  let mensaje = `⭐ *MIS SUSCRIPCIONES*\n\n`;
+  try {
+    const snapshot = await db.collection('usuarios').doc(ctx.from.id.toString()).collection('suscripciones').where('estado', '==', 'Activo').get();
+    
+    if (snapshot.empty) {
+      mensaje += `Actualmente no posees servicios activos. Ve a nuestro catálogo para realizar tu primera compra.`;
+    } else {
+      mensaje += `Aquí están tus servicios activos:\n\n`;
+      snapshot.forEach(doc => {
+        const sub = doc.data();
+        mensaje += `📺 *${sub.servicio}*\n${sub.datos_acceso}\n_Comprado el: ${new Date(sub.fecha_compra).toLocaleDateString('es-VE')}_\n\n`;
+      });
+    }
+  } catch (error) {
+    mensaje += `Hubo un error al cargar tus datos. Contacta a soporte.`;
+  }
+
+  await ctx.editMessageText(mensaje, {
     parse_mode: 'Markdown', 
     reply_markup: { inline_keyboard: [[{ text: "🛒 Ir al Catálogo", callback_data: "menu_catalogo" }], [{ text: "🔙 Volver al Menú", callback_data: "menu_inicio" }]] }
   }).catch(()=>{});
@@ -219,7 +249,9 @@ botTienda.on('photo', async (ctx) => {
   await ctx.deleteMessage().catch(() => {});
 
   const compraData = intencionCompra.get(userId) || { servicio: 'No definido', moneda: 'N/A', tasaDia: agente.tasas.fecha, venta: 0, costo: 0, ganancia: 0 };
-  pagosPendientes.set(ordenId, { userId, username });
+  
+  // Guardamos TODA la información en el ticket temporal
+  pagosPendientes.set(ordenId, { userId, username, compraData, ordenId });
 
   await ctx.reply('✅ *Comprobante enviado exitosamente*\n\nEl departamento de administración está verificando tu pago. En breve recibirás tus datos de acceso por esta misma vía.', {
     parse_mode: 'Markdown',
@@ -265,43 +297,114 @@ botAdmin.action('admin_tasas_manual', async (ctx) => {
 });
 
 botAdmin.on('text', async (ctx, next) => {
-  if (ctx.from.id === MI_ID) {
-    const texto = ctx.message.text.toUpperCase();
-    if (texto.startsWith('TASA ')) {
-      const partes = texto.split(' ');
-      if (partes.length === 3) {
-        const moneda = partes[1];
-        const valor = parseFloat(partes[2]);
-        if (valor > 0 && ['BCV', 'USDT', 'EURO'].includes(moneda)) {
-          await agente.setTasaManual(moneda, valor);
-          return ctx.reply(`✅ *ÉXITO:* La tasa de ${moneda} ha sido actualizada manualmente a **${valor}**. La tienda entera operará con este nuevo valor.`, { parse_mode: 'Markdown' }).catch(()=>{});
-        }
+  if (ctx.from.id !== MI_ID) return next();
+  const texto = ctx.message.text;
+
+  // 1️⃣ LÓGICA DE FIJACIÓN DE TASAS
+  if (texto.toUpperCase().startsWith('TASA ')) {
+    const partes = texto.toUpperCase().split(' ');
+    if (partes.length === 3) {
+      const moneda = partes[1];
+      const valor = parseFloat(partes[2]);
+      if (valor > 0 && ['BCV', 'USDT', 'EURO'].includes(moneda)) {
+        await agente.setTasaManual(moneda, valor);
+        return ctx.reply(`✅ *ÉXITO:* La tasa de ${moneda} ha sido actualizada manualmente a **${valor}**.`, { parse_mode: 'Markdown' }).catch(()=>{});
       }
-      return ctx.reply('❌ Formato incorrecto. Ejemplo de escritura: TASA BCV 36.60').catch(()=>{});
     }
+    return ctx.reply('❌ Formato incorrecto. Ejemplo de escritura: TASA BCV 36.60').catch(()=>{});
   }
+
+  // 2️⃣ LÓGICA DE AUTOCOMPLETADO (ENTREGA DE CUENTAS)
+  if (adminEsperandoDatos.has(MI_ID)) {
+    if (texto.toUpperCase() === 'CANCELAR') {
+      adminEsperandoDatos.delete(MI_ID);
+      return ctx.reply('❌ Entrega cancelada. El pago sigue pendiente de aprobación en el menú.', { parse_mode: 'Markdown' }).catch(()=>{});
+    }
+
+    const orden = adminEsperandoDatos.get(MI_ID);
+    const { userId, username, compraData, ordenId } = orden;
+
+    // A) Enviar datos de forma profesional al cliente
+    const mensajeCliente = `🎉 *¡PAGO APROBADO!*\n\nAquí tienes tus datos de acceso para *${compraData.servicio}*:\n\n${texto}\n\n_¡Gracias por tu compra! Recuerda respetar las políticas de uso para no perder tu garantía._`;
+    await botTienda.telegram.sendMessage(userId, mensajeCliente, { parse_mode: 'Markdown' }).catch(()=>{});
+
+    // B) Guardar Suscripción en Firebase (Para el perfil del usuario)
+    await db.collection('usuarios').doc(userId.toString()).collection('suscripciones').add({
+      servicio: compraData.servicio,
+      datos_acceso: texto,
+      fecha_compra: new Date().toISOString(),
+      estado: 'Activo'
+    }).catch(console.error);
+
+    // C) Registrar Venta y Ganancias en Firebase
+    await db.collection('ventas').doc(ordenId).set({
+      ordenId,
+      clienteId: userId,
+      clienteNombre: username,
+      servicio: compraData.servicio,
+      metodo_pago: compraData.moneda,
+      venta_usd: parseFloat(compraData.venta),
+      costo_usd: parseFloat(compraData.costo),
+      ganancia_usd: parseFloat(compraData.ganancia),
+      fecha_venta: new Date().toISOString()
+    }).catch(console.error);
+
+    await ctx.reply(`✅ *Cuenta Entregada y Registrada*\n\nEl cliente ya recibió sus credenciales y los $${compraData.ganancia} de ganancia fueron sumados a la base de datos.`, { parse_mode: 'Markdown' }).catch(()=>{});
+    
+    // Limpieza de memoria
+    adminEsperandoDatos.delete(MI_ID);
+    pagosPendientes.delete(ordenId);
+    return;
+  }
+
   return next();
 });
 
+// LÓGICAS NUEVAS DE BASE DE DATOS (GANANCIAS Y CLIENTES)
 botAdmin.action('admin_ganancias', async (ctx) => {
-  await ctx.answerCbQuery().catch(()=>{});
-  await ctx.reply('💰 *Módulo de Ganancias*\n\nListo para integrar con tu Base de Datos Firebase.', { parse_mode: 'Markdown' }).catch(()=>{});
+  await ctx.answerCbQuery('Calculando base de datos...').catch(()=>{});
+  try {
+    const snapshot = await db.collection('ventas').get();
+    let totalVentas = 0, totalCosto = 0, totalGanancia = 0, cantidad = 0;
+    
+    snapshot.forEach(doc => {
+      const v = doc.data();
+      totalVentas += parseFloat(v.venta_usd || 0);
+      totalCosto += parseFloat(v.costo_usd || 0);
+      totalGanancia += parseFloat(v.ganancia_usd || 0);
+      cantidad++;
+    });
+
+    const msj = `💰 *MÓDULO DE GANANCIAS (GLOBAL)*\n\n🛒 Servicios Vendidos: *${cantidad}*\n💵 Ingresos Brutos: *$${totalVentas.toFixed(2)}*\n📉 Costo de Inversión: *$${totalCosto.toFixed(2)}*\n\n💎 *GANANCIA NETA TOTAL: $${totalGanancia.toFixed(2)}*`;
+    await ctx.reply(msj, { parse_mode: 'Markdown' }).catch(()=>{});
+  } catch (error) {
+    await ctx.reply('❌ Error al consultar las ganancias.').catch(()=>{});
+  }
 });
 
 botAdmin.action('admin_clientes', async (ctx) => {
-  await ctx.answerCbQuery().catch(()=>{});
-  await ctx.reply('👥 *Base de Clientes*\n\nListo para integrar con tu Base de Datos Firebase.', { parse_mode: 'Markdown' }).catch(()=>{});
+  await ctx.answerCbQuery('Consultando registros...').catch(()=>{});
+  try {
+    const snapshot = await db.collection('usuarios').get();
+    await ctx.reply(`👥 *BASE DE DATOS DE CLIENTES*\n\nActualmente tienes *${snapshot.size}* clientes registrados que han interactuado con tu tienda.`, { parse_mode: 'Markdown' }).catch(()=>{});
+  } catch (error) {
+    await ctx.reply('❌ Error al consultar la base de clientes.').catch(()=>{});
+  }
 });
 
+// APROBAR PAGO Y ACTIVAR AUTOCOMPLETADO
 botAdmin.action(/aprobar_(.+)/, async (ctx) => {
   const ordenId = ctx.match[1];
   const orden = pagosPendientes.get(ordenId);
-  if (!orden) return ctx.answerCbQuery('Esta orden ya fue procesada.').catch(()=>{});
+  if (!orden) return ctx.answerCbQuery('Esta orden ya fue procesada o expiró.').catch(()=>{});
 
-  await botTienda.telegram.sendMessage(orden.userId, '✅ *¡TU PAGO HA SIDO APROBADO EXITOSAMENTE!*\n\nEn breve te enviaremos tus datos de acceso a través de este chat.', { parse_mode: 'Markdown' }).catch(()=>{});
-  await ctx.reply(`✅ *ENTREGA DE SERVICIO*\n👤 Para: ${orden.username}\n\nCopia este mensaje, llénalo y envíaselo:\n---\n📧 Correo:\n🔑 Contraseña:\n📅 Fecha de Inicio:\n⌛ Fecha de Corte:\n---`, { parse_mode: 'Markdown' }).catch(()=>{});
-  await ctx.editMessageCaption(`✅ *PAGO APROBADO Y ENTREGADO* (Orden #${ordenId})`, { parse_mode: 'Markdown' }).catch(()=>{});
-  pagosPendientes.delete(ordenId);
+  // Ponemos al admin en estado de espera para recibir los datos
+  adminEsperandoDatos.set(MI_ID, orden);
+
+  const mensaje = `✅ *PAGO APROBADO* (Orden #${ordenId})\n\nPor favor, responde a este mensaje escribiendo directamente los datos de la cuenta.\n\n*Ejemplo de formato:*\nCorreo: juan@gmail.com\nClave: 123456\nVence: 25/11\nPerfil: 2\nPin: 1234\n\n_(Si te arrepientes, escribe CANCELAR)_`;
+  
+  await ctx.editMessageCaption(`✅ *Aprobación en progreso...*`, { parse_mode: 'Markdown' }).catch(()=>{});
+  await ctx.reply(mensaje, { parse_mode: 'Markdown' }).catch(()=>{});
 });
 
 botAdmin.action(/rechazar_(.+)/, async (ctx) => {
