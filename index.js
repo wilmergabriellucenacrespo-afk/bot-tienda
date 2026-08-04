@@ -64,7 +64,8 @@ const menuPrincipalUsuario = {
   ]
 };
 
-botTienda.start(async (ctx) => {
+// --- FUNCIÓN RESCATADORA DE MENÚ ---
+const enviarMenuPrincipal = async (ctx) => {
   userEstados.delete(ctx.from.id);
   intencionCompra.delete(ctx.from.id);
   
@@ -80,7 +81,11 @@ botTienda.start(async (ctx) => {
   await ctx.deleteMessage().catch(()=>{});
   const bienvenida = `${obtenerSaludo()}, ${ctx.from.first_name}!* 👋\n\nBienvenido a tu tienda premium. 🚀\nOfrecemos servicios de alta calidad con garantía y soporte rápido.\n\nSelecciona una opción del menú para comenzar:`;
   await ctx.reply(bienvenida, { parse_mode: 'Markdown', reply_markup: menuPrincipalUsuario }).catch(console.log);
-});
+};
+
+// El bot responderá al comando oficial y también a palabras clave sueltas
+botTienda.start(enviarMenuPrincipal);
+botTienda.hears(/^(start|menu|menú|hola|inicio)$/i, enviarMenuPrincipal);
 
 botTienda.action('menu_inicio', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
@@ -227,7 +232,7 @@ botTienda.action(/pagar_(.+)/, async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
   let compra = intencionCompra.get(ctx.from.id);
   
-  if (!compra) return ctx.editMessageText("❌ Sesión agotada. Inicia la compra de nuevo.", { reply_markup: { inline_keyboard: [[{ text: "🏠 Menú", callback_data: "menu_inicio" }]] }}).catch(()=>{});
+  if (!compra) return ctx.editMessageText("❌ Sesión agotada. Inicia la compra de nuevo.", { reply_markup: { inline_keyboard: [[{ text: "🏠 Volver al Menú", callback_data: "menu_inicio" }]] }}).catch(()=>{});
   
   compra.moneda = moneda;
   let montoBs = 0, montoDivisa = compra[`precio_${moneda.toLowerCase()}`];
