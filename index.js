@@ -6,7 +6,7 @@ const http = require('http');
 const serviceAccount = JSON.parse(process.env.FIREBASE_JSON);
 admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
 const db = admin.firestore();
-
+ 
 // --- 2. INICIALIZAR AMBOS BOTS ---
 const botTienda = new Telegraf(process.env.TELEGRAM_TOKEN);
 const botAdmin = new Telegraf(process.env.ADMIN_TOKEN); // Tu nuevo bot
