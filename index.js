@@ -623,8 +623,30 @@ botAdmin.action(/soporte_res_(.+)/, async (ctx) => {
 });
 
 // ==========================================
-// 🛠️ MOTOR CEREBRAL DEL ADMIN (TEXTOS)
+// 🛠️ MOTOR CEREBRAL DEL ADMIN (TEXTOS Y ANTI-SCROLL)
 // ==========================================
+
+// 🧹 ASPIRADORA ANTI-SCROLL DEL PANEL ADMIN
+botAdmin.use(async (ctx, next) => {
+  // Solo aplicamos la limpieza si es un mensaje nuevo y eres tú (el admin)
+  if (ctx.message && ctx.from?.id === MI_ID) {
+    
+    // 1. Borramos instantáneamente lo que acabas de enviar en la pantalla
+    await ctx.deleteMessage().catch(()=>{});
+    
+    // 2. Si enviaste /start, dejamos que fluya para que te muestre el menú
+    if (ctx.message.text && ctx.message.text.startsWith('/start')) {
+      return next();
+    }
+    
+    // 3. Si enviaste un sticker, foto, gif o documento por accidente, lo bloqueamos y no hace nada
+    if (!ctx.message.text) return;
+  }
+  
+  // 4. Si es texto de trabajo (IDs, mensajes de soporte, etc), lo pasa al motor de abajo
+  return next();
+});
+
 botAdmin.on('text', async (ctx, next) => {
   if (ctx.from.id !== MI_ID) return next();
   const texto = ctx.message.text;
