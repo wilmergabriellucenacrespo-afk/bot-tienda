@@ -179,14 +179,14 @@ botTienda.action('activar_soporte', async (ctx) => {
   }).catch(()=>{});
 });
 
-// --- CATÁLOGO UNIFICADO (SOLO TASA EURO) ---
+// --- CATÁLOGO UNIFICADO ---
 botTienda.action('menu_catalogo', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
   if(modoMantenimiento) {
     return ctx.editMessageText(`🚧 *TIENDA EN MANTENIMIENTO*\n\nEstamos reabasteciendo inventario o actualizando el sistema. Vuelve más tarde.`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Volver", callback_data: "menu_inicio" }]] } }).catch(()=>{});
   }
 
-  let msj = `🏠 Inicio > 🛒 *CATÁLOGO*\n〰️〰️〰️〰️〰️〰️〰️〰️\n🎬 *STREAMING • RayoCinemaHD* 🎬\n\n📈 *TASA DE CONVERSIÓN (EURO):* ${agente.tasas.euro.toFixed(2)} Bs\n\n👇 *Selecciona:*`;
+  let msj = `🏠 Inicio > 🛒 *CATÁLOGO*\n〰️〰️〰️〰️〰️〰️〰️〰️\n🎬 *STREAMING • Nexo Digital* 🎬\n\n📈 *TASA DE CONVERSIÓN (EURO):* ${agente.tasas.euro.toFixed(2)} Bs\n\n👇 *Selecciona:*`;
 
   let botones = [];
   for (let i = 0; i < agente.servicios.length; i += 2) {
@@ -202,23 +202,22 @@ agente.servicios.forEach(servicio => {
   botTienda.action(`item_${servicio.id}`, async (ctx) => {
     await ctx.answerCbQuery().catch(()=>{});
     
-    // Todo se calcula exclusivamente en base a la Tasa Euro a BCV
     const pBCV = (servicio.venta * agente.tasas.euro).toFixed(2);
 
     const txt = `🏠 Inicio > 🛒 Catálogo > *${servicio.nombre}*\n〰️〰️〰️〰️〰️〰️〰️〰️\n⏳ *Duración:* ${servicio.duracion}\n\n` +
       `💵 *PRECIO DEL SERVICIO:*\n` +
       `• Valor referencial: *$${servicio.venta.toFixed(2)}*\n` +
       `• Total a pagar: *${pBCV} Bs* (Tasa Euro: ${agente.tasas.euro.toFixed(2)})\n\n` +
-      `⚠️ *Método único de pago:* Pago Móvil Nacional\n\n` +
-      `Si deseas continuar, elige "Pagar con Pago Móvil":`;
+      `⚠️ *Método único de pago:* Pago Móvil Nacional`;
 
+    // AQUÍ ESTÁ EL NUEVO BOTÓN DE CONSULTAR DISPONIBILIDAD
     await ctx.editMessageText(txt, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
+      [{ text: "🙋‍♂️ Consultar Disponibilidad", callback_data: `consultar_${servicio.id}` }],
       [{ text: "💳 Pagar con Pago Móvil", callback_data: `pago_${servicio.id}` }],
       [{ text: "🔙 Catálogo", callback_data: "menu_catalogo" }, { text: "🏠 Menú", callback_data: "menu_inicio" }]
     ]}}).catch(()=>{});
   });
 
-  // FLUJO DE PAGO DIRECTO A PAGO MÓVIL
   botTienda.action(`pago_${servicio.id}`, async (ctx) => {
     await ctx.answerCbQuery().catch(()=>{});
     
@@ -242,6 +241,26 @@ agente.servicios.forEach(servicio => {
     }).catch(()=>{});
   });
 });
+
+// --- LÓGICA DE CONSULTA DE STOCK ---
+botTienda.action(/consultar_(.+)/, async (ctx) => {
+  const sId = ctx.match[1];
+  const servicio = agente.servicios.find(s => s.id === sId);
+  if(!servicio) return ctx.answerCbQuery('Error', {show_alert:true}).catch(()=>{});
+
+  await ctx.answerCbQuery('Enviando consulta...').catch(()=>{});
+  await ctx.editMessageText(`⏳ *CONSULTANDO DISPONIBILIDAD*\n\nEstamos verificando si hay perfiles de *${servicio.nombre}* libres en este momento. Te avisaremos por aquí en breve.`, {
+    parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Volver al Catálogo", callback_data: "menu_catalogo" }]]}
+  }).catch(()=>{});
+
+  const msjAdmin = `❓ *CONSULTA DE DISPONIBILIDAD*\n〰️〰️〰️〰️〰️〰️〰️〰️\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n🛒 Desea comprar: *${servicio.nombre}*\n\n¿Tienes stock de este servicio en este momento?`;
+
+  await botAdmin.telegram.sendMessage(MI_ID, msjAdmin, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
+    [{ text: "✅ SÍ HAY STOCK (Avisar al cliente)", callback_data: `stock_si_${ctx.from.id}_${sId}` }],
+    [{ text: "❌ AGOTADO (Avisar al cliente)", callback_data: `stock_no_${ctx.from.id}_${sId}` }]
+  ]}}).catch(()=>{});
+});
+
 
 botTienda.action('subir_pago', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
@@ -287,7 +306,7 @@ function obtenerMenuAdmin() {
   return {
     inline_keyboard: [
       [{ text: "👥 Clientes (Pag.)", callback_data: "admin_clientes_0" }, { text: "🔍 Buscar Cliente", callback_data: "admin_buscar_inicio" }],
-      [{ text: "📊 Reportes y Contabilidad", callback_data: "admin_menu_reportes" }],
+      [{ text: "📊 Reportes y Contabilidad", callback_data: "admin_menu_reportes" }, { text: "🧾 Historial Órdenes", callback_data: "admin_historial" }],
       [{ text: "⏳ Radar de Vencimientos", callback_data: "admin_radar" }, { text: `🚧 Mantenimiento: ${modoMantenimiento?'ON':'OFF'}`, callback_data: "admin_mantenimiento" }],
       [{ text: "📢 Difusión Masiva", callback_data: "admin_difusion" }, { text: "🛑 Menú Baneos", callback_data: "admin_menu_baneos" }],
       [{ text: "🔄 Tasas API", callback_data: "admin_tasas" }, { text: "✏️ Tasas Manual", callback_data: "admin_tasas_manual" }]
@@ -308,7 +327,37 @@ botAdmin.action('admin_inicio', async (ctx) => {
   await ctx.editMessageText('👑 *PANEL DE CONTROL - NIVEL GERENCIAL*', { parse_mode: 'Markdown', reply_markup: obtenerMenuAdmin() }).catch(()=>{});
 });
 
-// --- MANTENIMIENTO Y BUSCADOR ---
+// --- HISTORIAL GLOBAL DE ÓRDENES Y ESTADOS ---
+botAdmin.action('admin_historial', async (ctx) => {
+  await ctx.answerCbQuery('Cargando historial...').catch(()=>{});
+  let msj = `🧾 *HISTORIAL GLOBAL DE ÓRDENES*\n〰️〰️〰️〰️〰️〰️〰️〰️\n\n`;
+
+  msj += `🟡 *EN ESPERA DE REVISIÓN:*\n`;
+  if (pagosPendientes.size === 0) msj += `_No hay pagos pendientes._\n`;
+  else {
+    pagosPendientes.forEach((orden) => {
+      msj += `• Orden #${orden.ordenId} | ID: \`${orden.userId}\`\n  🛒 ${orden.compraData.servicio}\n`;
+    });
+  }
+
+  msj += `\n🟢 *ÚLTIMAS 5 PROCESADAS (VENTAS):*\n`;
+  try {
+    const snap = await db.collection('ventas').orderBy('fecha_venta', 'desc').limit(5).get();
+    if(snap.empty) msj += `_Sin ventas registradas._\n`;
+    else {
+      snap.forEach(doc => {
+        const v = doc.data();
+        msj += `• #${v.ordenId} | ID: \`${v.clienteId}\`\n  ✅ ${v.servicio}\n`;
+      });
+    }
+  } catch(e) {}
+
+  msj += `\n_Para escribirle al privado a cualquier cliente, usa el botón "🔍 Buscar Cliente" en el Menú Central y pega su ID._`;
+
+  await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
+});
+
+
 botAdmin.action('admin_mantenimiento', async (ctx) => {
   modoMantenimiento = !modoMantenimiento;
   await ctx.answerCbQuery(`Mantenimiento ${modoMantenimiento ? 'Activado' : 'Desactivado'}`).catch(()=>{});
@@ -318,8 +367,32 @@ botAdmin.action('admin_mantenimiento', async (ctx) => {
 botAdmin.action('admin_buscar_inicio', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
   adminEstados.set('accion', 'BUSCAR_CLIENTE');
-  await ctx.editMessageText(`🔍 *BUSCADOR DE CLIENTES*\n\nEnvía el ID numérico del cliente para localizar su ficha al instante.`, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
+  await ctx.editMessageText(`🔍 *BUSCADOR DE CLIENTES*\n\nEnvía el ID numérico del cliente para localizar su ficha y poder escribirle al privado.`, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
+
+// --- RESPUESTAS A CONSULTA DE DISPONIBILIDAD ---
+botAdmin.action(/stock_si_(\d+)_(.+)/, async (ctx) => {
+  const userId = ctx.match[1];
+  const sId = ctx.match[2];
+  const servicio = agente.servicios.find(s => s.id === sId);
+
+  await ctx.editMessageText(`✅ Le confirmaste a \`${userId}\` que SÍ HAY STOCK.`).catch(()=>{});
+
+  if(servicio) {
+     await botTienda.telegram.sendMessage(userId, `✅ *¡Buenas noticias!*\n\nSí tenemos disponibilidad inmediata para *${servicio.nombre}*.\n\nPuedes proceder con tu compra ahora mismo:`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "💳 Pagar con Pago Móvil", callback_data: `pago_${sId}` }]] } }).catch(()=>{});
+  }
+});
+
+botAdmin.action(/stock_no_(\d+)_(.+)/, async (ctx) => {
+  const userId = ctx.match[1];
+  const sId = ctx.match[2];
+  const servicio = agente.servicios.find(s => s.id === sId) || { nombre: 'este servicio' };
+
+  await ctx.editMessageText(`❌ Le indicaste a \`${userId}\` que ESTÁ AGOTADO.`).catch(()=>{});
+
+  await botTienda.telegram.sendMessage(userId, `❌ *Aviso de Disponibilidad*\n\nLamentamos informarte que *${servicio.nombre}* se encuentra temporalmente agotado.\n\nPor favor, consulta nuevamente más tarde o revisa nuestro catálogo para otras opciones.`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🛒 Ver Catálogo", callback_data: "menu_catalogo" }]] } }).catch(()=>{});
+});
+
 
 // --- CLIENTES CON PAGINADO ---
 botAdmin.action(/admin_clientes_(\d+)/, async (ctx) => {
@@ -524,7 +597,7 @@ botAdmin.on('text', async (ctx, next) => {
   await ctx.deleteMessage().catch(()=>{}); 
   const estadoActual = adminEstados.get('accion');
 
-  // BUSCADOR CLIENTE
+  // BUSCADOR CLIENTE PARA SOPORTE DIRECTO
   if (estadoActual === 'BUSCAR_CLIENTE') {
     adminEstados.clear();
     const uId = texto.trim();
@@ -649,7 +722,6 @@ async function actualizarCuentasRegresivas() {
 }
 setInterval(actualizarCuentasRegresivas, 6 * 60 * 60 * 1000);
 
-// Iniciadores del sistema
 botTienda.launch().then(async () => {
   await botTienda.telegram.setMyCommands([{ command: 'start', description: '🏠 Abrir Tienda Principal' }]).catch(()=>{});
   console.log("Tienda Premium Iniciada.");
