@@ -187,43 +187,55 @@ botTienda.action('menu_catalogo', async (ctx) => {
   await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: botones } }).catch(()=>{});
 });
 
-agente.servicios.forEach(servicio => {
-  botTienda.action(`item_${servicio.id}`, async (ctx) => {
-    await ctx.answerCbQuery().catch(()=>{});
-    const pBCV = (servicio.venta * agente.tasas.euro).toFixed(2);
-    const txt = `🏠 Inicio > 🛒 Catálogo > *${servicio.nombre}*\n〰️〰️〰️〰️〰️〰️〰️〰️\n⏳ *Duración:* ${servicio.duracion}\n\n` +
-      `💵 *PRECIO DEL SERVICIO:*\n` +
-      `• Valor referencial: *$${servicio.venta.toFixed(2)}*\n` +
-      `• Total a pagar: *${pBCV} Bs* (Tasa Euro: ${agente.tasas.euro.toFixed(2)})\n\n` +
-      `⚠️ *Método único de pago:* Pago Móvil Nacional`;
+botTienda.action(/item_(.+)/, async (ctx) => {
+  const sId = ctx.match[1];
+  const servicio = agente.servicios.find(s => s.id === sId);
+  
+  if(!servicio) {
+    return ctx.answerCbQuery('⚠️ Servicio no encontrado. Abre el catálogo de nuevo.', {show_alert:true}).catch(()=>{});
+  }
 
-    await ctx.editMessageText(txt, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
-      [{ text: "🙋‍♂️ Consultar Disponibilidad", callback_data: `consultar_${servicio.id}` }],
-      [{ text: "🔙 Catálogo", callback_data: "menu_catalogo" }, { text: "🏠 Menú", callback_data: "menu_inicio" }]
-    ]}}).catch(()=>{});
+  await ctx.answerCbQuery().catch(()=>{});
+  const pBCV = (servicio.venta * agente.tasas.euro).toFixed(2);
+  const txt = `🏠 Inicio > 🛒 Catálogo > *${servicio.nombre}*\n〰️〰️〰️〰️〰️〰️〰️〰️\n⏳ *Duración:* ${servicio.duracion}\n\n` +
+    `💵 *PRECIO DEL SERVICIO:*\n` +
+    `• Valor referencial: *$${servicio.venta.toFixed(2)}*\n` +
+    `• Total a pagar: *${pBCV} Bs* (Tasa Euro: ${agente.tasas.euro.toFixed(2)})\n\n` +
+    `⚠️ *Método único de pago:* Pago Móvil Nacional`;
+
+  await ctx.editMessageText(txt, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
+    [{ text: "🙋‍♂️ Consultar Disponibilidad", callback_data: `consultar_${servicio.id}` }],
+    [{ text: "🔙 Catálogo", callback_data: "menu_catalogo" }, { text: "🏠 Menú", callback_data: "menu_inicio" }]
+  ]}}).catch(()=>{});
+});
+
+botTienda.action(/pago_(.+)/, async (ctx) => {
+  const sId = ctx.match[1];
+  const servicio = agente.servicios.find(s => s.id === sId);
+  
+  if(!servicio) {
+    return ctx.answerCbQuery('⚠️ Servicio no encontrado. Abre el catálogo de nuevo.', {show_alert:true}).catch(()=>{});
+  }
+
+  await ctx.answerCbQuery().catch(()=>{});
+  const pBCV = (servicio.venta * agente.tasas.euro).toFixed(2);
+  
+  // 🔥 FIREBASE: Guardar carrito
+  await db.collection('carritos').doc(ctx.from.id.toString()).set({ 
+    servicio: servicio.nombre, id_servicio: servicio.id, costo: servicio.costo, 
+    venta: servicio.venta, ganancia: (servicio.venta - servicio.costo).toFixed(2), moneda: 'BCV'
   });
+  
+  const datosPagoMovil = `\n🏦 *Datos de Pago Móvil*\nBanco: Venezuela (0102)\nTeléfono: \`04262333684\`\nCédula: \`V27145645\``;
+  let textoPago = `🧾 *RESUMEN DE FACTURACIÓN*\n〰️〰️〰️〰️〰️〰️〰️〰️\n🛒 *Servicio:* ${servicio.nombre}\n\n_(Toca los datos bancarios para copiarlos)_\n\n`;
+  textoPago += `${datosPagoMovil}\n\n🇻🇪 *MONTO EXACTO A TRANSFERIR: ${pBCV} Bs*`; 
 
-  botTienda.action(`pago_${servicio.id}`, async (ctx) => {
-    await ctx.answerCbQuery().catch(()=>{});
-    const pBCV = (servicio.venta * agente.tasas.euro).toFixed(2);
-    
-    // 🔥 FIREBASE: Guardar carrito
-    await db.collection('carritos').doc(ctx.from.id.toString()).set({ 
-      servicio: servicio.nombre, id_servicio: servicio.id, costo: servicio.costo, 
-      venta: servicio.venta, ganancia: (servicio.venta - servicio.costo).toFixed(2), moneda: 'BCV'
-    });
-    
-    const datosPagoMovil = `\n🏦 *Datos de Pago Móvil*\nBanco: Venezuela (0102)\nTeléfono: \`04262333684\`\nCédula: \`V27145645\``;
-    let textoPago = `🧾 *RESUMEN DE FACTURACIÓN*\n〰️〰️〰️〰️〰️〰️〰️〰️\n🛒 *Servicio:* ${servicio.nombre}\n\n_(Toca los datos bancarios para copiarlos)_\n\n`;
-    textoPago += `${datosPagoMovil}\n\n🇻🇪 *MONTO EXACTO A TRANSFERIR: ${pBCV} Bs*`; 
-
-    await ctx.editMessageText(`${textoPago}\n〰️〰️〰️〰️〰️〰️〰️〰️\n1️⃣ Realiza el pago exacto.\n2️⃣ Presiona abajo para subir comprobante o escribe tu número de referencia.`, {
-      parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
-        [{ text: "📤 Subir Comprobante Foto/PDF", callback_data: "subir_pago" }],
-        [{ text: "🏠 Cancelar Operación", callback_data: "menu_inicio" }]
-      ]}
-    }).catch(()=>{});
-  });
+  await ctx.editMessageText(`${textoPago}\n〰️〰️〰️〰️〰️〰️〰️〰️\n1️⃣ Realiza el pago exacto.\n2️⃣ Presiona abajo para subir comprobante o escribe tu número de referencia.`, {
+    parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
+      [{ text: "📤 Subir Comprobante Foto/PDF", callback_data: "subir_pago" }],
+      [{ text: "🏠 Cancelar Operación", callback_data: "menu_inicio" }]
+    ]}
+  }).catch(()=>{});
 });
 
 botTienda.action(/consultar_(.+)/, async (ctx) => {
