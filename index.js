@@ -416,7 +416,7 @@ botAdmin.action('admin_notif', async (ctx) => {
     } else {
       await botAdmin.telegram.sendMessage(MI_ID, `${ficha}\n📝 *REFERENCIA:* \`${orden.refTexto}\``, { parse_mode: 'Markdown', reply_markup: markupAprob }).catch(()=>{});
     }
-  }t
+  } 
 });
 
 botAdmin.action('admin_historial', async (ctx) => {
@@ -464,23 +464,19 @@ botAdmin.action('admin_buscar_inicio', async (ctx) => {
   await ctx.editMessageText(`🔍 *BUSCADOR DE CLIENTES*\n\nEnvía el ID numérico del cliente para localizar su ficha y poder escribirle al privado.`, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
 
-botAdmin.action(/stock_si_(\d+)_(.+)/, async (ctx) => {
-  const userId = ctx.match[1];
-  const sId = ctx.match[2];
-  const servicio = agente.servicios.find(s => s.id === sId);
-  await ctx.editMessageText(`✅ Le confirmaste a \`${userId}\` que SÍ HAY STOCK.`).catch(()=>{});
-
-  if(servicio) {
-     await botTienda.telegram.sendMessage(userId, `✅ *¡Buenas noticias!*\n\nSí tenemos disponibilidad inmediata para *${servicio.nombre}*.\n\nPuedes proceder con tu compra ahora mismo:`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "💳 Pagar con Pago Móvil", callback_data: `pago_${sId}` }]] } }).catch(()=>{});
-  }
-});
-
-botAdmin.action(/stock_no_(\d+)_(.+)/, async (ctx) => {
-  const userId = ctx.match[1];
-  const sId = ctx.match[2];
-  const servicio = agente.servicios.find(s => s.id === sId) || { nombre: 'este servicio' };
-  await ctx.editMessageText(`❌ Le indicaste a \`${userId}\` que ESTÁ AGOTADO.`).catch(()=>{});
-  await botTienda.telegram.sendMessage(userId, `❌ *Aviso de Disponibilidad*\n\nLamentamos informarte que *${servicio.nombre}* se encuentra temporalmente agotado.\n\nPor favor, consulta nuevamente más tarde o revisa nuestro catálogo para otras opciones.`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🛒 Ver Catálogo", callback_data: "menu_catalogo" }]] } }).catch(()=>{});
+// --- APROBACIÓN DE ÓRDENES (CORREGIDO) ---
+botAdmin.action(/aprobar_(.+)/, async (ctx) => {
+  await ctx.answerCbQuery().catch(()=>{}); // <-- Agregado para detener la carga
+  const ordenId = ctx.match[1];
+  const docOrden = await db.collection('ordenes_pendientes').doc(ordenId).get();
+  
+  if (!docOrden.exists) return ctx.answerCbQuery('Esta orden ya fue procesada o no existe.', { show_alert: true }).catch(()=>{});
+  
+  const orden = docOrden.data();
+  adminEstados.set('ENTREGANDO', orden);
+  await ctx.deleteMessage().catch(()=>{});
+  const msg = `✅ *APROBANDO ORDEN #${ordenId}*\n\nCopia, llena y envía:\n\n\`Correo: \nClave: \nPin: \``;
+  await ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar Entrega", callback_data: "admin_inicio" }]] } }).catch(()=>{});
 });
 
 botAdmin.action(/admin_clientes_(\d+)/, async (ctx) => {
