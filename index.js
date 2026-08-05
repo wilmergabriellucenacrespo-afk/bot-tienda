@@ -833,5 +833,22 @@ botTienda.launch().then(async () => {
 
 botAdmin.launch().then(() => console.log("Panel Admin Iniciado.")).catch(console.error);
 
-const server = http.createServer((req, res) => { res.writeHead(200); res.end('Sistema Total Operativo'); });
-server.listen(process.env.PORT || 3000);
+// ==========================================
+// 🌐 SERVIDOR WEB (SISTEMA ANTI-SUSPENSIÓN RENDER)
+// ==========================================
+const server = http.createServer((req, res) => { 
+  // Esta es la ruta que visitará el bot externo para mantener vivo a Render
+  if (req.url === '/ping' || req.url === '/') {
+    res.writeHead(200, { 'Content-Type': 'text/plain' }); 
+    res.end('Nexo Digital Bot Activo y Despierto'); 
+    // Esto imprimirá un mensaje en tus logs de Render cada vez que reciba el toque
+    console.log('⚡ Ping recibido. Sistema mantenido despierto.');
+  } else {
+    res.writeHead(404);
+    res.end();
+  }
+});
+
+server.listen(process.env.PORT || 3000, () => {
+  console.log(`🌐 Servidor Anti-Suspensión escuchando en el puerto ${process.env.PORT || 3000}`);
+});
