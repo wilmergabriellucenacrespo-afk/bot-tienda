@@ -591,7 +591,8 @@ botAdmin.action('admin_tasas', async (ctx) => {
 });
 botAdmin.action('admin_tasas_manual', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
-  await ctx.editMessageText(`✏️ Formato: \`TASA BCV 40.50\``, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
+  const msj = `✏️ *ACTUALIZACIÓN MANUAL DE TASAS*\n〰️〰️〰️〰️〰️〰️〰️〰️\n\nComo tu tienda opera en base al *EURO*, esta es la tasa principal que debes ajustar para proteger tu capital si la automatización llega a fallar.\n\nPara cambiar la tasa en tiempo real, simplemente escribe y envía un mensaje aquí con este formato exacto:\n\n👉 \`TASA EURO 45.50\`\n\n_(Recuerda usar punto en lugar de coma. También puedes usar \`TASA BCV 45.00\` si lo necesitas)._`;
+  await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
 
 // --- APROBACIÓN DE ÓRDENES ---
