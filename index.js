@@ -280,10 +280,19 @@ botTienda.on(['photo', 'document'], async (ctx, next) => {
   const fichaAdmin = `🚨 *¡NUEVA ORDEN DE COMPRA! (#${ordenId})*\n〰️〰️〰️〰️〰️〰️〰️〰️\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n🛒 Servicio: ${compraData.servicio}\n💵 Método: 🇻🇪 PAGO MÓVIL\n💰 Ganancia: $${compraData.ganancia}\n📎 Formato: ${esPdf ? '📄 Documento PDF' : '📸 Fotografía'}`;
   const markupAprobacion = { inline_keyboard: [[{ text: "✅ Aprobar", callback_data: `aprobar_${ordenId}` }], [{ text: "❌ Rechazar", callback_data: `rechazar_${ordenId}` }]] };
   
-  if (esPdf) {
-    await botAdmin.telegram.sendDocument(MI_ID, fileId, { caption: fichaAdmin, parse_mode: 'Markdown', reply_markup: markupAprobacion }).catch(()=>{});
-  } else {
-    await botAdmin.telegram.sendPhoto(MI_ID, fileId, { caption: fichaAdmin, parse_mode: 'Markdown', reply_markup: markupAprobacion }).catch(()=>{});
+  try {
+    // 1. El Bot Tienda genera un enlace web temporal del archivo
+    const fileLink = await botTienda.telegram.getFileLink(fileId);
+    
+    // 2. El Bot Administrador usa ese enlace para enviarte la imagen/PDF
+    if (esPdf) {
+      await botAdmin.telegram.sendDocument(MI_ID, { url: fileLink.href }, { caption: fichaAdmin, parse_mode: 'Markdown', reply_markup: markupAprobacion });
+    } else {
+      await botAdmin.telegram.sendPhoto(MI_ID, { url: fileLink.href }, { caption: fichaAdmin, parse_mode: 'Markdown', reply_markup: markupAprobacion });
+    }
+  } catch (error) {
+    // 3. Respaldo: Si el archivo del cliente pesa más de 20MB, te avisa en texto para que vayas al otro bot a verlo.
+    await botAdmin.telegram.sendMessage(MI_ID, `${fichaAdmin}\n\n⚠️ *AVISO:* El archivo es muy pesado o hubo un error de transferencia. Revisa el chat del Bot Tienda para ver la foto.`, { parse_mode: 'Markdown', reply_markup: markupAprobacion }).catch(()=>{});
   }
   
   await carritoRef.delete().catch(()=>{});
@@ -382,12 +391,20 @@ botAdmin.action('admin_notif', async (ctx) => {
     const markupAprob = { inline_keyboard: [[{ text: "✅ Aprobar", callback_data: `aprobar_${orden.ordenId}` }, { text: "❌ Rechazar", callback_data: `rechazar_${orden.ordenId}` }]] };
     
     if (orden.fileId) {
-      if (orden.esPdf) await botAdmin.telegram.sendDocument(MI_ID, orden.fileId, { caption: ficha, parse_mode: 'Markdown', reply_markup: markupAprob }).catch(()=>{});
-      else await botAdmin.telegram.sendPhoto(MI_ID, orden.fileId, { caption: ficha, parse_mode: 'Markdown', reply_markup: markupAprob }).catch(()=>{});
+      try {
+        const fileLink = await botTienda.telegram.getFileLink(orden.fileId);
+        if (orden.esPdf) {
+          await botAdmin.telegram.sendDocument(MI_ID, { url: fileLink.href }, { caption: ficha, parse_mode: 'Markdown', reply_markup: markupAprob });
+        } else {
+          await botAdmin.telegram.sendPhoto(MI_ID, { url: fileLink.href }, { caption: ficha, parse_mode: 'Markdown', reply_markup: markupAprob });
+        }
+      } catch (error) {
+        await botAdmin.telegram.sendMessage(MI_ID, `${ficha}\n\n⚠️ *AVISO:* Archivo no transferible. Revisa el chat del Bot Tienda.`, { parse_mode: 'Markdown', reply_markup: markupAprob }).catch(()=>{});
+      }
     } else {
       await botAdmin.telegram.sendMessage(MI_ID, `${ficha}\n📝 *REFERENCIA:* \`${orden.refTexto}\``, { parse_mode: 'Markdown', reply_markup: markupAprob }).catch(()=>{});
     }
-  }
+  }t
 });
 
 botAdmin.action('admin_historial', async (ctx) => {
