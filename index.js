@@ -39,6 +39,18 @@ function obtenerSaludo() {
 botTienda.use(async (ctx, next) => {
   if (ctx.from && baneados.has(ctx.from.id)) return;
   
+  // ESCUDO DE MANTENIMIENTO GLOBAL PROFESIONAL
+  if (modoMantenimiento) {
+    if (ctx.from.id !== MI_ID) {
+      const msjMantenimiento = "⚙️ *SISTEMA EN MANTENIMIENTO*\n\nEstamos realizando actualizaciones en nuestra plataforma para mejorar tu experiencia. \n\n⏳ *Por favor, vuelve en 5 minutos.*";
+      if (ctx.callbackQuery) {
+        return ctx.answerCbQuery('⚙️ Sistema en mantenimiento. Vuelve en 5 min.', { show_alert: true }).catch(()=>{});
+      } else {
+        return ctx.reply(msjMantenimiento, { parse_mode: 'Markdown' }).catch(()=>{});
+      }
+    }
+  }
+  
   if (userEstados.get(ctx.from?.id) === 'SOPORTE' && ctx.message && !ctx.message.text?.startsWith('/')) {
     const markup = { inline_keyboard: [[{ text: "💬 Responder a este cliente", callback_data: `soporte_res_${ctx.from.id}` }]] };
     await botAdmin.telegram.sendMessage(MI_ID, `💬 *NUEVO MENSAJE DE SOPORTE*\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n\n*Dice:* ${ctx.message.text}`, { parse_mode: 'Markdown', reply_markup: markup }).catch(()=>{});
@@ -210,10 +222,9 @@ agente.servicios.forEach(servicio => {
       `• Total a pagar: *${pBCV} Bs* (Tasa Euro: ${agente.tasas.euro.toFixed(2)})\n\n` +
       `⚠️ *Método único de pago:* Pago Móvil Nacional`;
 
-    // AQUÍ ESTÁ EL NUEVO BOTÓN DE CONSULTAR DISPONIBILIDAD
+  // CATÁLOGO: SOLO MUESTRA CONSULTA. EL PAGO SE OCULTA.
     await ctx.editMessageText(txt, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
       [{ text: "🙋‍♂️ Consultar Disponibilidad", callback_data: `consultar_${servicio.id}` }],
-      [{ text: "💳 Pagar con Pago Móvil", callback_data: `pago_${servicio.id}` }],
       [{ text: "🔙 Catálogo", callback_data: "menu_catalogo" }, { text: "🏠 Menú", callback_data: "menu_inicio" }]
     ]}}).catch(()=>{});
   });
@@ -336,18 +347,18 @@ botAdmin.action('admin_historial', async (ctx) => {
   if (pagosPendientes.size === 0) msj += `_No hay pagos pendientes._\n`;
   else {
     pagosPendientes.forEach((orden) => {
-      msj += `• Orden #${orden.ordenId} | ID: \`${orden.userId}\`\n  🛒 ${orden.compraData.servicio}\n`;
+      msj += `• Orden #${orden.ordenId}\n👤 Perfil: [Toca para ir a su chat](tg://user?id=${orden.userId})\n🆔 ID (Toca para copiar): \`${orden.userId}\`\n🛒 ${orden.compraData.servicio}\n\n`;
     });
   }
 
-  msj += `\n🟢 *ÚLTIMAS 5 PROCESADAS (VENTAS):*\n`;
+  msj += `🟢 *ÚLTIMAS 5 PROCESADAS (VENTAS):*\n`;
   try {
     const snap = await db.collection('ventas').orderBy('fecha_venta', 'desc').limit(5).get();
     if(snap.empty) msj += `_Sin ventas registradas._\n`;
     else {
       snap.forEach(doc => {
         const v = doc.data();
-        msj += `• #${v.ordenId} | ID: \`${v.clienteId}\`\n  ✅ ${v.servicio}\n`;
+        msj += `• #${v.ordenId}\n👤 Perfil: [Toca para ir a su chat](tg://user?id=${v.clienteId})\n🆔 ID (Toca para copiar): \`${v.clienteId}\`\n✅ ${v.servicio}\n\n`;
       });
     }
   } catch(e) {}
