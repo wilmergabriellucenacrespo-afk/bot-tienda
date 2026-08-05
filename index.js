@@ -794,10 +794,10 @@ botAdmin.on('text', async (ctx, next) => {
     
     await db.collection('usuarios').doc(orden.userId.toString()).collection('suscripciones').add({ servicio: orden.compraData.servicio, datos_acceso: texto, fecha_compra: hoyISO, fecha_corte: vencimientoISO, estado: 'Activo', pinned_msg_id: msgIdParaGuardar }).catch(()=>{});
     await db.collection('usuarios').doc(orden.userId.toString()).collection('pagos').add({ servicio: orden.compraData.servicio, monto: orden.compraData.venta, moneda: orden.compraData.moneda, fecha: hoyISO }).catch(()=>{});
-    await db.collection('ventas').doc(orden.ordenId).set({ ordenId: orden.ordenId, clienteId: orden.userId, servicio: orden.compraData.servicio, venta_usd: parseFloat(orden.compraData.venta), ganancia_usd: parseFloat(orden.compraData.ganancia), fecha_venta: hoyISO }).catch(()=>{});
+   await db.collection('ventas').doc(orden.ordenId).set({ ordenId: orden.ordenId, clienteId: orden.userId, servicio: orden.compraData.servicio, venta_usd: parseFloat(orden.compraData.venta), ganancia_usd: parseFloat(orden.compraData.ganancia), fecha_venta: hoyISO }).catch(()=>{});
 
     adminEstados.clear();
-    await db.collection('ordenes_pendientes').doc(orden.ordenId).delete().catch(()=>{});).
+    await db.collection('ordenes_pendientes').doc(orden.ordenId).delete().catch(()=>{});
     return ctx.reply(`✅ *Cuenta Entregada y Mensaje Anclado.*`, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
   }
   return next();
