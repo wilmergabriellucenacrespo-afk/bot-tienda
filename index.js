@@ -16,11 +16,10 @@ agente.iniciar(db).catch(console.error);
 const botTienda = new Telegraf(process.env.TELEGRAM_TOKEN);
 const botAdmin = new Telegraf(process.env.ADMIN_TOKEN);
 
-// NUEVO: Soporte Multi-Admin. (Para añadir más, sepáralos con comas en tu variable ADMIN_IDS)
+// SOPORTE MULTI-ADMIN: Permite varios administradores.
 const ADMIN_IDS = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id.trim())) : [8264753970];
-const MI_ID = ADMIN_IDS[0]; // El primer ID de la lista es el "Gerente" que recibe alertas.
+const MI_ID = ADMIN_IDS[0]; 
 
-// ELIMINAMOS los Maps de pagos e intenciones. Ahora viven de forma persistente en Firebase.
 const adminEstados = new Map(); 
 const userEstados = new Map(); 
 const baneados = new Set(); 
@@ -36,15 +35,14 @@ function obtenerSaludo() {
 }
 
 // ==========================================
-// 🛡️ MIDDLEWARE
+// 🛡️ MIDDLEWARE DE TIENDA
 // ==========================================
 botTienda.use(async (ctx, next) => {
   if (ctx.from && baneados.has(ctx.from.id)) return;
   
-  // ESCUDO DE MANTENIMIENTO GLOBAL PROFESIONAL
   if (modoMantenimiento) {
-    if (ctx.from.id !== MI_ID) {
-      const msjMantenimiento = "⚙️ *SISTEMA EN MANTENIMIENTO*\n\nEstamos realizando actualizaciones en nuestra plataforma para mejorar tu experiencia. \n\n⏳ *Por favor, vuelve en 5 minutos.*";
+    if (!ADMIN_IDS.includes(ctx.from.id)) {
+      const msjMantenimiento = "⚙️ *SISTEMA EN MANTENIMIENTO*\n\nEstamos actualizando nuestra plataforma. \n⏳ *Por favor, vuelve en 5 minutos.*";
       if (ctx.callbackQuery) {
         return ctx.answerCbQuery('⚙️ Sistema en mantenimiento. Vuelve en 5 min.', { show_alert: true }).catch(()=>{});
       } else {
@@ -60,31 +58,6 @@ botTienda.use(async (ctx, next) => {
     return ctx.reply('✅ _Tu mensaje fue enviado a la administración. Recibirás respuesta por aquí._', { parse_mode: 'Markdown' }).catch(()=>{});
   }
 
-  if (ctx.message && ctx.message.text && intencionCompra.has(ctx.from.id) && !ctx.message.text.startsWith('/')) {
-    const compraData = intencionCompra.get(ctx.from.id);
-    const referencia = ctx.message.text;
-    const ordenId = Math.floor(Math.random() * 100000).toString();
-    await ctx.deleteMessage().catch(() => {});
-    
-    pagosPendientes.set(ordenId, { userId: ctx.from.id, username: ctx.from.username || ctx.from.first_name, compraData, ordenId, refTexto: referencia });
-
-    await ctx.reply('✅ *Referencia de Pago Recibida*\n\nNuestra administración está validando tu número de referencia. Tus accesos llegarán pronto.', {
-      parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🏠 Menú Principal", callback_data: "menu_inicio" }]] }
-    }).catch(()=>{});
-
-    const fichaAdmin = `🚨 *ORDEN CON REFERENCIA! (#${ordenId})*\n〰️〰️〰️〰️〰️〰️〰️〰️\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n🛒 Servicio: ${compraData.servicio}\n💵 Método: 🇻🇪 PAGO MÓVIL\n💰 Ganancia: $${compraData.ganancia}\n\n📝 *NRO REFERENCIA ENVIADA:*\n\`${referencia}\``;
-
-    await botAdmin.telegram.sendMessage(MI_ID, fichaAdmin, {
-      parse_mode: 'Markdown',
-      reply_markup: { inline_keyboard: [
-        [{ text: "✅ Aprobar Pago", callback_data: `aprobar_${ordenId}` }],
-        [{ text: "❌ Rechazar Pago", callback_data: `rechazar_${ordenId}` }]
-      ]}
-    }).catch(()=>{});
-    
-    intencionCompra.delete(ctx.from.id);
-    return;
-  }
   return next();
 });
 
@@ -102,8 +75,6 @@ const menuPrincipalUsuario = {
 
 botTienda.start(async (ctx) => {
   userEstados.delete(ctx.from.id);
-  intencionCompra.delete(ctx.from.id);
-  
   try {
     const userRef = db.collection('usuarios').doc(ctx.from.id.toString());
     const doc = await userRef.get();
@@ -120,7 +91,6 @@ botTienda.start(async (ctx) => {
 botTienda.action('menu_inicio', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
   userEstados.delete(ctx.from.id);
-  intencionCompra.delete(ctx.from.id);
   await ctx.editMessageText(`🏠 *Menú Principal*\nSelecciona la acción que deseas realizar:`, { parse_mode: 'Markdown', reply_markup: menuPrincipalUsuario }).catch(()=>{});
 });
 
@@ -200,7 +170,6 @@ botTienda.action('activar_soporte', async (ctx) => {
   }).catch(()=>{});
 });
 
-// --- CATÁLOGO UNIFICADO ---
 botTienda.action('menu_catalogo', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
   if(modoMantenimiento) {
@@ -208,7 +177,6 @@ botTienda.action('menu_catalogo', async (ctx) => {
   }
 
   let msj = `🏠 Inicio > 🛒 *CATÁLOGO*\n〰️〰️〰️〰️〰️〰️〰️〰️\n🎬 *STREAMING • Nexo Digital* 🎬\n\n📈 *TASA DE CONVERSIÓN (EURO):* ${agente.tasas.euro.toFixed(2)} Bs\n\n👇 *Selecciona:*`;
-
   let botones = [];
   for (let i = 0; i < agente.servicios.length; i += 2) {
     let fila = [{ text: agente.servicios[i].nombre, callback_data: `item_${agente.servicios[i].id}` }];
@@ -222,16 +190,13 @@ botTienda.action('menu_catalogo', async (ctx) => {
 agente.servicios.forEach(servicio => {
   botTienda.action(`item_${servicio.id}`, async (ctx) => {
     await ctx.answerCbQuery().catch(()=>{});
-    
     const pBCV = (servicio.venta * agente.tasas.euro).toFixed(2);
-
     const txt = `🏠 Inicio > 🛒 Catálogo > *${servicio.nombre}*\n〰️〰️〰️〰️〰️〰️〰️〰️\n⏳ *Duración:* ${servicio.duracion}\n\n` +
       `💵 *PRECIO DEL SERVICIO:*\n` +
       `• Valor referencial: *$${servicio.venta.toFixed(2)}*\n` +
       `• Total a pagar: *${pBCV} Bs* (Tasa Euro: ${agente.tasas.euro.toFixed(2)})\n\n` +
       `⚠️ *Método único de pago:* Pago Móvil Nacional`;
 
-  // CATÁLOGO: SOLO MUESTRA CONSULTA. EL PAGO SE OCULTA.
     await ctx.editMessageText(txt, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
       [{ text: "🙋‍♂️ Consultar Disponibilidad", callback_data: `consultar_${servicio.id}` }],
       [{ text: "🔙 Catálogo", callback_data: "menu_catalogo" }, { text: "🏠 Menú", callback_data: "menu_inicio" }]
@@ -240,17 +205,15 @@ agente.servicios.forEach(servicio => {
 
  botTienda.action(`pago_${servicio.id}`, async (ctx) => {
     await ctx.answerCbQuery().catch(()=>{});
-    
     const pBCV = (servicio.venta * agente.tasas.euro).toFixed(2);
     
-    // GUARDADO EN FIREBASE EN VEZ DE RAM
+    // FIREBASE: Guardar intención de compra
     await db.collection('carritos').doc(ctx.from.id.toString()).set({ 
       servicio: servicio.nombre, id_servicio: servicio.id, costo: servicio.costo, 
       venta: servicio.venta, ganancia: (servicio.venta - servicio.costo).toFixed(2), moneda: 'BCV'
     });
     
     const datosPagoMovil = `\n🏦 *Datos de Pago Móvil*\nBanco: Venezuela (0102)\nTeléfono: \`04262333684\`\nCédula: \`V27145645\``;
-    
     let textoPago = `🧾 *RESUMEN DE FACTURACIÓN*\n〰️〰️〰️〰️〰️〰️〰️〰️\n🛒 *Servicio:* ${servicio.nombre}\n\n_(Toca los datos bancarios para copiarlos)_\n\n`;
     textoPago += `${datosPagoMovil}\n\n🇻🇪 *MONTO EXACTO A TRANSFERIR: ${pBCV} Bs*`; 
 
@@ -263,7 +226,6 @@ agente.servicios.forEach(servicio => {
   });
 });
 
-// --- LÓGICA DE CONSULTA DE STOCK ---
 botTienda.action(/consultar_(.+)/, async (ctx) => {
   const sId = ctx.match[1];
   const servicio = agente.servicios.find(s => s.id === sId);
@@ -282,24 +244,21 @@ botTienda.action(/consultar_(.+)/, async (ctx) => {
   ]}}).catch(()=>{});
 });
 
-
 botTienda.action('subir_pago', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
-  await ctx.editMessageText('📸 *Enviar Comprobante*\n\nAdjunta y envía la foto de tu pago en este chat. Si no tienes foto, escribe tu número de referencia.', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Cancelar", callback_data: "menu_inicio" }]] } }).catch(()=>{});
+  await ctx.editMessageText('📸 *Enviar Comprobante*\n\nAdjunta y envía la foto de tu pago o el comprobante en PDF en este chat.', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Cancelar", callback_data: "menu_inicio" }]] } }).catch(()=>{});
 });
 
-// RECEPCIÓN COMPROBANTE (SOPORTA FOTOS Y PDF) - GUARDADO EN FIREBASE
+// RECEPCIÓN COMPROBANTE (FOTOS Y PDF) MIGRADO A FIREBASE
 botTienda.on(['photo', 'document'], async (ctx, next) => {
   if (userEstados.get(ctx.from.id) === 'SOPORTE') return next(); 
   
-  // 1. Extraemos el carrito de Firebase en lugar de la RAM
   const carritoRef = db.collection('carritos').doc(ctx.from.id.toString());
   const carritoDoc = await carritoRef.get();
   
   if (!carritoDoc.exists) return ctx.reply("❌ *No tienes compras pendientes.*\nSelecciona un servicio en el catálogo.", { parse_mode: 'Markdown' }).catch(()=>{});
   const compraData = carritoDoc.data();
 
-  // 2. Inteligencia para detectar si es Foto o PDF
   let fileId = null;
   let esPdf = false;
   if (ctx.message.photo) {
@@ -312,16 +271,13 @@ botTienda.on(['photo', 'document'], async (ctx, next) => {
   const ordenId = Math.floor(Math.random() * 100000).toString();
   await ctx.deleteMessage().catch(() => {});
   
-  // 3. RESPALDO SEGURO: Guardamos la orden pendiente DIRECTO en Firebase
   await db.collection('ordenes_pendientes').doc(ordenId).set({
     userId: ctx.from.id, username: ctx.from.username || ctx.from.first_name, compraData, ordenId, fileId, esPdf, fecha: new Date().toISOString()
   });
 
   await ctx.reply('✅ *Comprobante recibido*\n\nAdministración verificando. Tus accesos se anclarán aquí pronto.', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🏠 Menú Principal", callback_data: "menu_inicio" }]] } }).catch(()=>{});
 
-  const fichaAdmin = `🚨 *¡NUEVA ORDEN DE COMPRA! (#${ordenId})*\n〰️〰️〰️〰️〰️〰️〰️〰️\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n🛒 Servicio: ${compraData.servicio}\n💵 Método: ${compraData.moneda}\n💰 Ganancia: $${compraData.ganancia}\n📎 Formato: ${esPdf ? '📄 Documento PDF' : '📸 Fotografía'}`;
-
-  // 4. Se envía al Admin de forma diferenciada
+  const fichaAdmin = `🚨 *¡NUEVA ORDEN DE COMPRA! (#${ordenId})*\n〰️〰️〰️〰️〰️〰️〰️〰️\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n🛒 Servicio: ${compraData.servicio}\n💵 Método: 🇻🇪 PAGO MÓVIL\n💰 Ganancia: $${compraData.ganancia}\n📎 Formato: ${esPdf ? '📄 Documento PDF' : '📸 Fotografía'}`;
   const markupAprobacion = { inline_keyboard: [[{ text: "✅ Aprobar", callback_data: `aprobar_${ordenId}` }], [{ text: "❌ Rechazar", callback_data: `rechazar_${ordenId}` }]] };
   
   if (esPdf) {
@@ -330,26 +286,48 @@ botTienda.on(['photo', 'document'], async (ctx, next) => {
     await botAdmin.telegram.sendPhoto(MI_ID, fileId, { caption: fichaAdmin, parse_mode: 'Markdown', reply_markup: markupAprobacion }).catch(()=>{});
   }
   
-  // 5. Destruimos el carrito de Firebase
   await carritoRef.delete().catch(()=>{});
 });
-// 🧹 ASPIRADORA ANTI-SCROLL (Limpieza automática del chat del cliente)
-botTienda.on('message', async (ctx, next) => {
-  // Si el usuario está en modo soporte, dejamos pasar el mensaje
-  if (userEstados.get(ctx.from?.id) === 'SOPORTE') return next();
-  
-  // Si el usuario está enviando una referencia de pago, lo dejamos pasar
-  if (intencionCompra.has(ctx.from?.id)) return next();
 
-  // Si envía /start, borramos su mensaje de comando para que no ensucie la pantalla
+botTienda.on('message', async (ctx, next) => {
+  if (userEstados.get(ctx.from?.id) === 'SOPORTE') return next();
   if (ctx.message.text && ctx.message.text.startsWith('/start')) {
     await ctx.deleteMessage().catch(()=>{});
-    return next(); // Pasa a la función start original para lanzar el menú
+    return next(); 
   }
+  
+  // VERIFICAR SI ENVIÓ REFERENCIA EN VEZ DE FOTO
+  const carritoRef = db.collection('carritos').doc(ctx.from?.id?.toString());
+  const carritoDoc = await carritoRef.get();
+  if (carritoDoc.exists && ctx.message.text) {
+     const compraData = carritoDoc.data();
+     const referencia = ctx.message.text;
+     const ordenId = Math.floor(Math.random() * 100000).toString();
+     await ctx.deleteMessage().catch(() => {});
+     
+     await db.collection('ordenes_pendientes').doc(ordenId).set({
+       userId: ctx.from.id, username: ctx.from.username || ctx.from.first_name, compraData, ordenId, refTexto: referencia, esPdf: false, fecha: new Date().toISOString()
+     });
 
-  // Si envía cualquier otra basura, sticker, emoji o texto fuera de lugar, SE BORRA INVISIBLEMENTE
+     await ctx.reply('✅ *Referencia de Pago Recibida*\n\nNuestra administración está validando tu número de referencia. Tus accesos llegarán pronto.', {
+       parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🏠 Menú Principal", callback_data: "menu_inicio" }]] }
+     }).catch(()=>{});
+
+     const fichaAdmin = `🚨 *ORDEN CON REFERENCIA! (#${ordenId})*\n〰️〰️〰️〰️〰️〰️〰️〰️\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n🛒 Servicio: ${compraData.servicio}\n💵 Método: 🇻🇪 PAGO MÓVIL\n💰 Ganancia: $${compraData.ganancia}\n\n📝 *NRO REFERENCIA ENVIADA:*\n\`${referencia}\``;
+
+     await botAdmin.telegram.sendMessage(MI_ID, fichaAdmin, {
+       parse_mode: 'Markdown',
+       reply_markup: { inline_keyboard: [[{ text: "✅ Aprobar Pago", callback_data: `aprobar_${ordenId}` }], [{ text: "❌ Rechazar Pago", callback_data: `rechazar_${ordenId}` }]]}
+     }).catch(()=>{});
+     
+     await carritoRef.delete().catch(()=>{});
+     return;
+  }
+  
+  if (!ctx.message.text && !ctx.message.photo && !ctx.message.document) return;
   await ctx.deleteMessage().catch(()=>{});
 });
+
 // ==========================================
 // 💼 BOT ADMINISTRADOR - PANEL TOTAL
 // ==========================================
@@ -367,7 +345,7 @@ function obtenerMenuAdmin() {
 const btnVolverAdmin = { inline_keyboard: [[{ text: "🔙 Volver al Menú Central", callback_data: "admin_inicio" }]] };
 
 botAdmin.start(async (ctx) => {
-  if (ctx.from.id !== MI_ID) return;
+  if (!ADMIN_IDS.includes(ctx.from.id)) return;
   adminEstados.clear();
   await ctx.reply('👑 *PANEL DE CONTROL - NIVEL GERENCIAL*', { parse_mode: 'Markdown', reply_markup: obtenerMenuAdmin() }).catch(()=>{});
 });
@@ -378,18 +356,21 @@ botAdmin.action('admin_inicio', async (ctx) => {
   await ctx.editMessageText('👑 *PANEL DE CONTROL - NIVEL GERENCIAL*', { parse_mode: 'Markdown', reply_markup: obtenerMenuAdmin() }).catch(()=>{});
 });
 
-// --- HISTORIAL GLOBAL DE ÓRDENES Y ESTADOS ---
 botAdmin.action('admin_historial', async (ctx) => {
   await ctx.answerCbQuery('Cargando historial...').catch(()=>{});
   let msj = `🧾 *HISTORIAL GLOBAL DE ÓRDENES*\n〰️〰️〰️〰️〰️〰️〰️〰️\n\n`;
 
   msj += `🟡 *EN ESPERA DE REVISIÓN:*\n`;
-  if (pagosPendientes.size === 0) msj += `_No hay pagos pendientes._\n`;
-  else {
-    pagosPendientes.forEach((orden) => {
-      msj += `• Orden #${orden.ordenId}\n👤 Perfil: [Toca para ir a su chat](tg://user?id=${orden.userId})\n🆔 ID (Toca para copiar): \`${orden.userId}\`\n🛒 ${orden.compraData.servicio}\n\n`;
-    });
-  }
+  try {
+    const ordenesSnap = await db.collection('ordenes_pendientes').get();
+    if (ordenesSnap.empty) msj += `_No hay pagos pendientes._\n`;
+    else {
+      ordenesSnap.forEach((doc) => {
+        const orden = doc.data();
+        msj += `• Orden #${orden.ordenId}\n👤 Perfil: [Toca para ir a su chat](tg://user?id=${orden.userId})\n🆔 ID (Toca para copiar): \`${orden.userId}\`\n🛒 ${orden.compraData.servicio}\n\n`;
+      });
+    }
+  } catch(e) {}
 
   msj += `🟢 *ÚLTIMAS 5 PROCESADAS (VENTAS):*\n`;
   try {
@@ -404,10 +385,8 @@ botAdmin.action('admin_historial', async (ctx) => {
   } catch(e) {}
 
   msj += `\n_Para escribirle al privado a cualquier cliente, usa el botón "🔍 Buscar Cliente" en el Menú Central y pega su ID._`;
-
   await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
-
 
 botAdmin.action('admin_mantenimiento', async (ctx) => {
   modoMantenimiento = !modoMantenimiento;
@@ -421,12 +400,10 @@ botAdmin.action('admin_buscar_inicio', async (ctx) => {
   await ctx.editMessageText(`🔍 *BUSCADOR DE CLIENTES*\n\nEnvía el ID numérico del cliente para localizar su ficha y poder escribirle al privado.`, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
 
-// --- RESPUESTAS A CONSULTA DE DISPONIBILIDAD ---
 botAdmin.action(/stock_si_(\d+)_(.+)/, async (ctx) => {
   const userId = ctx.match[1];
   const sId = ctx.match[2];
   const servicio = agente.servicios.find(s => s.id === sId);
-
   await ctx.editMessageText(`✅ Le confirmaste a \`${userId}\` que SÍ HAY STOCK.`).catch(()=>{});
 
   if(servicio) {
@@ -438,14 +415,10 @@ botAdmin.action(/stock_no_(\d+)_(.+)/, async (ctx) => {
   const userId = ctx.match[1];
   const sId = ctx.match[2];
   const servicio = agente.servicios.find(s => s.id === sId) || { nombre: 'este servicio' };
-
   await ctx.editMessageText(`❌ Le indicaste a \`${userId}\` que ESTÁ AGOTADO.`).catch(()=>{});
-
   await botTienda.telegram.sendMessage(userId, `❌ *Aviso de Disponibilidad*\n\nLamentamos informarte que *${servicio.nombre}* se encuentra temporalmente agotado.\n\nPor favor, consulta nuevamente más tarde o revisa nuestro catálogo para otras opciones.`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🛒 Ver Catálogo", callback_data: "menu_catalogo" }]] } }).catch(()=>{});
 });
 
-
-// --- CLIENTES CON PAGINADO ---
 botAdmin.action(/admin_clientes_(\d+)/, async (ctx) => {
   const page = parseInt(ctx.match[1]);
   const limit = 10;
@@ -483,7 +456,6 @@ botAdmin.action(/ficha_(.+)/, async (ctx) => {
   await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "💬 Enviar Mensaje", callback_data: `soporte_res_${uId}` }], [{ text: "🔙 Clientes", callback_data: "admin_clientes_0" }]]}}).catch(()=>{});
 });
 
-// --- MENÚ DE REPORTES AVANZADO ---
 botAdmin.action('admin_menu_reportes', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
   const botonesRep = { inline_keyboard: [
@@ -552,7 +524,6 @@ botAdmin.action('rep_json', async (ctx) => {
   await botAdmin.telegram.sendDocument(MI_ID, { source: Buffer.from(JSON.stringify(obj, null, 2)), filename: 'Respaldo_Usuarios.json' }, { caption: "💾 Respaldo BD Generado" }).catch(()=>{});
 });
 
-// --- RADAR DE VENCIMIENTOS ---
 botAdmin.action('admin_radar', async (ctx) => {
   await ctx.answerCbQuery('Escaneando cuentas...').catch(()=>{});
   let msj = `⏳ *RADAR DE VENCIMIENTOS (<= 3 DÍAS)*\n〰️〰️〰️〰️〰️〰️〰️〰️\n`;
@@ -571,9 +542,8 @@ botAdmin.action('admin_radar', async (ctx) => {
       });
     }
     if(!hayCuentas) msj += `No hay cuentas a punto de vencer.`;
- } catch(e) {}
+  } catch(e) {}
   
-  // PROTECCIÓN DE CARACTERES: Si supera el límite de Telegram, crea un archivo TXT
   if (msj.length > 4000) {
     const buffer = Buffer.from(msj, 'utf-8');
     await ctx.deleteMessage().catch(()=>{});
@@ -583,7 +553,6 @@ botAdmin.action('admin_radar', async (ctx) => {
   }
 });
 
-// --- MENU BANEOS ---
 botAdmin.action('admin_menu_baneos', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
   await ctx.editMessageText('🛑 *SISTEMA DE BLACKLIST*', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
@@ -620,7 +589,8 @@ botAdmin.action('admin_tasas_manual', async (ctx) => {
   await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
 
-// --- APROBACIÓN DE ÓRDENES (LEYENDO DE FIREBASE) ---
+
+// --- APROBACIÓN DE ÓRDENES (CORREGIDO) ---
 botAdmin.action(/aprobar_(.+)/, async (ctx) => {
   const ordenId = ctx.match[1];
   const docOrden = await db.collection('ordenes_pendientes').doc(ordenId).get();
@@ -644,21 +614,7 @@ botAdmin.action(/rechazar_(.+)/, async (ctx) => {
   await botTienda.telegram.sendMessage(orden.userId, '❌ *Pago Rechazado*\n\nVerifica tu pago y contacta a Soporte.', { parse_mode: 'Markdown' }).catch(()=>{});
   await ctx.deleteMessage().catch(()=>{}); 
   
-  // Borrado de la orden huérfana de Firebase
   await db.collection('ordenes_pendientes').doc(ordenId).delete().catch(()=>{});
-  await ctx.answerCbQuery('Rechazada exitosamente.').catch(()=>{}); 
-});
-  const msg = `✅ *APROBANDO ORDEN #${ordenId}*\n\nCopia, llena y envía:\n\n\`Correo: \nClave: \nPin: \``;
-  await ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar Entrega", callback_data: "admin_inicio" }]] } }).catch(()=>{});
-});
-
-botAdmin.action(/rechazar_(.+)/, async (ctx) => {
-  const ordenId = ctx.match[1];
-  const orden = pagosPendientes.get(ordenId);
-  if (!orden) return ctx.answerCbQuery('Orden ya procesada.', { show_alert: true }).catch(()=>{});
-  await botTienda.telegram.sendMessage(orden.userId, '❌ *Pago Rechazado*\n\nVerifica tu pago y contacta a Soporte.', { parse_mode: 'Markdown' }).catch(()=>{});
-  await ctx.deleteMessage().catch(()=>{}); 
-  pagosPendientes.delete(ordenId);
   await ctx.answerCbQuery('Rechazada exitosamente.').catch(()=>{}); 
 });
 
@@ -672,35 +628,21 @@ botAdmin.action(/soporte_res_(.+)/, async (ctx) => {
 // ==========================================
 // 🛠️ MOTOR CEREBRAL DEL ADMIN (TEXTOS Y ANTI-SCROLL)
 // ==========================================
-
-// 🧹 ASPIRADORA ANTI-SCROLL DEL PANEL ADMIN
 botAdmin.use(async (ctx, next) => {
-  // Solo aplicamos la limpieza si es un mensaje nuevo y eres tú (el admin)
-  if (ctx.message && ctx.from?.id === MI_ID) {
-    
-    // 1. Borramos instantáneamente lo que acabas de enviar en la pantalla
+  if (ctx.message && ADMIN_IDS.includes(ctx.from?.id)) {
     await ctx.deleteMessage().catch(()=>{});
-    
-    // 2. Si enviaste /start, dejamos que fluya para que te muestre el menú
-    if (ctx.message.text && ctx.message.text.startsWith('/start')) {
-      return next();
-    }
-    
-    // 3. Si enviaste un sticker, foto, gif o documento por accidente, lo bloqueamos y no hace nada
+    if (ctx.message.text && ctx.message.text.startsWith('/start')) return next();
     if (!ctx.message.text) return;
   }
-  
-  // 4. Si es texto de trabajo (IDs, mensajes de soporte, etc), lo pasa al motor de abajo
   return next();
 });
 
 botAdmin.on('text', async (ctx, next) => {
-  if (ctx.from.id !== MI_ID) return next();
+  if (!ADMIN_IDS.includes(ctx.from.id)) return next();
   const texto = ctx.message.text;
-  await ctx.deleteMessage().catch(()=>{}); 
   const estadoActual = adminEstados.get('accion');
 
-  // BUSCADOR CLIENTE PARA SOPORTE DIRECTO
+  // BUSCADOR CLIENTE
   if (estadoActual === 'BUSCAR_CLIENTE') {
     adminEstados.clear();
     const uId = texto.trim();
@@ -739,7 +681,6 @@ botAdmin.on('text', async (ctx, next) => {
       try { 
         await botTienda.telegram.sendMessage(doc.id, `📢 *Anuncio*\n\n${texto}`, { parse_mode: 'Markdown' }); 
         enviados++; 
-        // FRENO DE MANO: Pausa de medio segundo entre cada mensaje
         await new Promise(resolve => setTimeout(resolve, 500)); 
       } catch(e){} 
     }
@@ -794,7 +735,7 @@ botAdmin.on('text', async (ctx, next) => {
     
     await db.collection('usuarios').doc(orden.userId.toString()).collection('suscripciones').add({ servicio: orden.compraData.servicio, datos_acceso: texto, fecha_compra: hoyISO, fecha_corte: vencimientoISO, estado: 'Activo', pinned_msg_id: msgIdParaGuardar }).catch(()=>{});
     await db.collection('usuarios').doc(orden.userId.toString()).collection('pagos').add({ servicio: orden.compraData.servicio, monto: orden.compraData.venta, moneda: orden.compraData.moneda, fecha: hoyISO }).catch(()=>{});
-   await db.collection('ventas').doc(orden.ordenId).set({ ordenId: orden.ordenId, clienteId: orden.userId, servicio: orden.compraData.servicio, venta_usd: parseFloat(orden.compraData.venta), ganancia_usd: parseFloat(orden.compraData.ganancia), fecha_venta: hoyISO }).catch(()=>{});
+    await db.collection('ventas').doc(orden.ordenId).set({ ordenId: orden.ordenId, clienteId: orden.userId, servicio: orden.compraData.servicio, venta_usd: parseFloat(orden.compraData.venta), ganancia_usd: parseFloat(orden.compraData.ganancia), fecha_venta: hoyISO }).catch(()=>{});
 
     adminEstados.clear();
     await db.collection('ordenes_pendientes').doc(orden.ordenId).delete().catch(()=>{});
