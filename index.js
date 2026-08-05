@@ -124,14 +124,21 @@ botTienda.action('menu_inicio', async (ctx) => {
 
 botTienda.action('menu_faq', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
-  const msj = `🏠 Inicio > ❓ *Preguntas Frecuentes*\n〰️〰️〰️〰️〰️〰️〰️〰️\n\n🔹 *¿Cuánto tarda la entrega?*\nR: Lapso de 5 a 15 minutos tras verificar pago.\n\n🔹 *¿Pantalla caída?*\nR: Escribe a soporte. Tienes garantía total.\n\n🔹 *¿Métodos de Pago?*\nR: Operamos exclusivamente con Pago Móvil utilizando la tasa del Euro.`;
+  const msj = `🏠 Inicio > ❓ *PREGUNTAS FRECUENTES*\n〰️〰️〰️〰️〰️〰️〰️〰️\n\n` +
+    `🔹 *¿Por qué no puedo ponerle un PIN a mi perfil?*\nR: Para proteger tu cuenta. Nuestro sistema y proveedores monitorean las cuentas. Cambiar la estructura original causa bloqueos masivos.\n\n` +
+    `🔹 *¿Qué pasa si mi pantalla dice "Contraseña Incorrecta"?*\nR: Mantén la calma, es un reseteo rutinario de las plataformas. Solo ve a "Hablar con Administración" y en un lapso de 12 a 24 horas te daremos la nueva clave.\n\n` +
+    `🔹 *¿Por qué debo consultar disponibilidad primero?*\nR: Vendemos muy rápido. Queremos asegurar de que tu pantalla esté lista para entrega inmediata antes de que envíes tu dinero.`;
   await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Volver", callback_data: "menu_inicio" }]] } }).catch(()=>{});
 });
 
 botTienda.action('menu_politicas', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
-  const msj = `🏠 Inicio > 📜 *POLÍTICAS Y GARANTÍAS*\n〰️〰️〰️〰️〰️〰️〰️〰️\n\n1️⃣ **Soporte Total:** Garantía válida por días exactos.\n2️⃣ **Prohibiciones:** NO cambiar correos, claves ni perfiles. Anula garantía.\n3️⃣ **Entrega:** Solo tras confirmación de pago.`;
-  await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Volver", callback_data: "menu_inicio" }]] } }).catch(()=>{});
+  const msj = `🏠 Inicio > 📜 *POLÍTICAS Y GARANTÍAS*\n〰️〰️〰️〰️〰️〰️〰️〰️\nAl comprar, aceptas automáticamente estos términos:\n\n` +
+    `🛡️ *1. Asignación Estricta:* Te daremos el número de tu pantalla. Tienes ESTRICTAMENTE PROHIBIDO entrar a otros perfiles, cambiar nombres, poner PIN o modificar el idioma. Hacerlo anula la garantía de inmediato.\n\n` +
+    `⏳ *2. Tiempos de Reposición:* Si una pantalla presenta fallas, el tiempo estimado de solución es de 12 a 24 horas hábiles tras reportarlo a soporte.\n\n` +
+    `🏦 *3. Prohibido Pagar sin Consultar:* Usa el botón "Consultar Disponibilidad". Si pagas sin consultar y no hay stock, el reembolso demorará hasta 48 horas.\n\n` +
+    `🏡 *4. Bloqueo de Hogar:* Si Netflix pide "Actualizar Hogar", NO lo hagas tú. Escribe a soporte y te daremos el código para no bloquear la cuenta.`;
+  await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Entendido - Volver", callback_data: "menu_inicio" }]] } }).catch(()=>{});
 });
 
 botTienda.action('menu_perfil', async (ctx) => {
@@ -309,7 +316,23 @@ botTienda.on('photo', async (ctx, next) => {
   }
   intencionCompra.delete(ctx.from.id);
 });
+// 🧹 ASPIRADORA ANTI-SCROLL (Limpieza automática del chat del cliente)
+botTienda.on('message', async (ctx, next) => {
+  // Si el usuario está en modo soporte, dejamos pasar el mensaje
+  if (userEstados.get(ctx.from?.id) === 'SOPORTE') return next();
+  
+  // Si el usuario está enviando una referencia de pago, lo dejamos pasar
+  if (intencionCompra.has(ctx.from?.id)) return next();
 
+  // Si envía /start, borramos su mensaje de comando para que no ensucie la pantalla
+  if (ctx.message.text && ctx.message.text.startsWith('/start')) {
+    await ctx.deleteMessage().catch(()=>{});
+    return next(); // Pasa a la función start original para lanzar el menú
+  }
+
+  // Si envía cualquier otra basura, sticker, emoji o texto fuera de lugar, SE BORRA INVISIBLEMENTE
+  await ctx.deleteMessage().catch(()=>{});
+});
 // ==========================================
 // 💼 BOT ADMINISTRADOR - PANEL TOTAL
 // ==========================================
