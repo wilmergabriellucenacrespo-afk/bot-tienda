@@ -17,17 +17,13 @@ const botTienda = new Telegraf(process.env.TELEGRAM_TOKEN);
 const botAdmin = new Telegraf(process.env.ADMIN_TOKEN);
 const MI_ID = 8264753970;
 
-// ==========================================
-// 🧠 MEMORIA Y ESTADOS DEL SISTEMA
-// ==========================================
 const pagosPendientes = new Map(); 
 const intencionCompra = new Map(); 
 const adminEstados = new Map(); 
 const userEstados = new Map(); 
 const baneados = new Set(); 
-let modoMantenimiento = false; // Variable global para Mantenimiento
+let modoMantenimiento = false; 
 
-// Cargar baneados al iniciar
 db.collection('blacklist').get().then(snap => snap.forEach(doc => baneados.add(parseInt(doc.id)))).catch(()=>{});
 
 function obtenerSaludo() {
@@ -38,19 +34,18 @@ function obtenerSaludo() {
 }
 
 // ==========================================
-// 🛡️ MIDDLEWARE: MANTENIMIENTO, SOPORTE Y BLACKLIST
+// 🛡️ MIDDLEWARE
 // ==========================================
 botTienda.use(async (ctx, next) => {
   if (ctx.from && baneados.has(ctx.from.id)) return;
   
   if (userEstados.get(ctx.from?.id) === 'SOPORTE' && ctx.message && !ctx.message.text?.startsWith('/')) {
     const markup = { inline_keyboard: [[{ text: "💬 Responder a este cliente", callback_data: `soporte_res_${ctx.from.id}` }]] };
-    await botAdmin.telegram.sendMessage(MI_ID, `💬 *NUEVO MENSAJE DE SOPORTE*\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n\n*Dice:* ${ctx.message.text}`, { parse_mode: 'Markdown', reply_markup: markup }).catch(console.log);
+    await botAdmin.telegram.sendMessage(MI_ID, `💬 *NUEVO MENSAJE DE SOPORTE*\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n\n*Dice:* ${ctx.message.text}`, { parse_mode: 'Markdown', reply_markup: markup }).catch(()=>{});
     await ctx.deleteMessage().catch(()=>{}); 
     return ctx.reply('✅ _Tu mensaje fue enviado a la administración. Recibirás respuesta por aquí._', { parse_mode: 'Markdown' }).catch(()=>{});
   }
 
-  // Recepción de Referencia Bancaria (TEXTO) en lugar de Foto
   if (ctx.message && ctx.message.text && intencionCompra.has(ctx.from.id) && !ctx.message.text.startsWith('/')) {
     const compraData = intencionCompra.get(ctx.from.id);
     const referencia = ctx.message.text;
@@ -63,8 +58,7 @@ botTienda.use(async (ctx, next) => {
       parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🏠 Menú Principal", callback_data: "menu_inicio" }]] }
     }).catch(()=>{});
 
-    let iconoMoneda = compraData.moneda === 'USDT' ? '🟢' : (compraData.moneda === 'EURO' ? '💶' : '🇻🇪');
-    const fichaAdmin = `🚨 *ORDEN CON REFERENCIA! (#${ordenId})*\n〰️〰️〰️〰️〰️〰️〰️〰️\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n🛒 Servicio: ${compraData.servicio}\n💵 Método: ${iconoMoneda} ${compraData.moneda}\n💰 Ganancia: $${compraData.ganancia}\n\n📝 *NRO REFERENCIA / BILLETERA ENVIADA:*\n\`${referencia}\``;
+    const fichaAdmin = `🚨 *ORDEN CON REFERENCIA! (#${ordenId})*\n〰️〰️〰️〰️〰️〰️〰️〰️\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n🛒 Servicio: ${compraData.servicio}\n💵 Método: 🇻🇪 PAGO MÓVIL\n💰 Ganancia: $${compraData.ganancia}\n\n📝 *NRO REFERENCIA ENVIADA:*\n\`${referencia}\``;
 
     await botAdmin.telegram.sendMessage(MI_ID, fichaAdmin, {
       parse_mode: 'Markdown',
@@ -77,12 +71,11 @@ botTienda.use(async (ctx, next) => {
     intencionCompra.delete(ctx.from.id);
     return;
   }
-
   return next();
 });
 
 // ==========================================
-// 🛒 BOT TIENDA - MÓDULO DE USUARIOS
+// 🛒 BOT TIENDA - USUARIOS
 // ==========================================
 const menuPrincipalUsuario = {
   inline_keyboard: [
@@ -107,7 +100,7 @@ botTienda.start(async (ctx) => {
   } catch (e) {}
 
   const bienvenida = `${obtenerSaludo()}, *${ctx.from.first_name}!* 👋\n\nBienvenido a tu tienda premium. 🚀\nOfrecemos servicios de alta calidad con garantía y soporte rápido.\n\nSelecciona una opción del menú para comenzar:`;
-  await ctx.reply(bienvenida, { parse_mode: 'Markdown', reply_markup: menuPrincipalUsuario }).catch(console.log);
+  await ctx.reply(bienvenida, { parse_mode: 'Markdown', reply_markup: menuPrincipalUsuario }).catch(()=>{});
 });
 
 botTienda.action('menu_inicio', async (ctx) => {
@@ -119,7 +112,7 @@ botTienda.action('menu_inicio', async (ctx) => {
 
 botTienda.action('menu_faq', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
-  const msj = `🏠 Inicio > ❓ *Preguntas Frecuentes*\n〰️〰️〰️〰️〰️〰️〰️〰️\n\n🔹 *¿Cuánto tarda la entrega?*\nR: Lapso de 5 a 15 minutos tras verificar pago.\n\n🔹 *¿Pantalla caída?*\nR: Escribe a soporte. Tienes garantía total.\n\n🔹 *¿Aceptan Pago Móvil desde otros bancos?*\nR: Sí, desde cualquier banco nacional.`;
+  const msj = `🏠 Inicio > ❓ *Preguntas Frecuentes*\n〰️〰️〰️〰️〰️〰️〰️〰️\n\n🔹 *¿Cuánto tarda la entrega?*\nR: Lapso de 5 a 15 minutos tras verificar pago.\n\n🔹 *¿Pantalla caída?*\nR: Escribe a soporte. Tienes garantía total.\n\n🔹 *¿Métodos de Pago?*\nR: Operamos exclusivamente con Pago Móvil utilizando la tasa del Euro.`;
   await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Volver", callback_data: "menu_inicio" }]] } }).catch(()=>{});
 });
 
@@ -149,7 +142,7 @@ botTienda.action('historial_pagos', async (ctx) => {
       snap.forEach(doc => {
         const p = doc.data();
         const fecha = new Date(p.fecha).toLocaleString('es-VE', { timeZone: 'America/Caracas', dateStyle: 'short' });
-        msj += `✅ *${p.servicio}* | 📅 ${fecha}\n💵 Costo: ${parseFloat(p.monto).toFixed(2)} ${p.moneda}\n\n`;
+        msj += `✅ *${p.servicio}* | 📅 ${fecha}\n💵 Pagaste: ${parseFloat(p.monto).toFixed(2)} ${p.moneda}\n\n`;
       });
     }
   } catch(e) {}
@@ -186,17 +179,14 @@ botTienda.action('activar_soporte', async (ctx) => {
   }).catch(()=>{});
 });
 
+// --- CATÁLOGO UNIFICADO (SOLO TASA EURO) ---
 botTienda.action('menu_catalogo', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
   if(modoMantenimiento) {
     return ctx.editMessageText(`🚧 *TIENDA EN MANTENIMIENTO*\n\nEstamos reabasteciendo inventario o actualizando el sistema. Vuelve más tarde.`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Volver", callback_data: "menu_inicio" }]] } }).catch(()=>{});
   }
 
-  const tUSDT = agente.tasas.usdt.toFixed(2);
-  const tEUR = agente.tasas.euro.toFixed(2);
-  const tBCV = agente.tasas.bcv.toFixed(2);
-
-  let msj = `🏠 Inicio > 🛒 *CATÁLOGO*\n〰️〰️〰️〰️〰️〰️〰️〰️\n📈 *TASAS DEL DÍA (1$):*\n• USDT: ${tUSDT} Bs\n• EURO: ${tEUR} Bs\n• BCV: ${tBCV} Bs\n\n👇 *Selecciona:*`;
+  let msj = `🏠 Inicio > 🛒 *CATÁLOGO*\n〰️〰️〰️〰️〰️〰️〰️〰️\n🎬 *STREAMING • RayoCinemaHD* 🎬\n\n📈 *TASA DE CONVERSIÓN (EURO):* ${agente.tasas.euro.toFixed(2)} Bs\n\n👇 *Selecciona:*`;
 
   let botones = [];
   for (let i = 0; i < agente.servicios.length; i += 2) {
@@ -211,73 +201,46 @@ botTienda.action('menu_catalogo', async (ctx) => {
 agente.servicios.forEach(servicio => {
   botTienda.action(`item_${servicio.id}`, async (ctx) => {
     await ctx.answerCbQuery().catch(()=>{});
-    const pUSDT = (servicio.precio_usdt * agente.tasas.usdt).toFixed(2);
-    const pEUR = (servicio.precio_euro * agente.tasas.euro).toFixed(2);
-    const pBCV = (servicio.precio_bcv * agente.tasas.bcv).toFixed(2);
+    
+    // Todo se calcula exclusivamente en base a la Tasa Euro a BCV
+    const pBCV = (servicio.venta * agente.tasas.euro).toFixed(2);
 
     const txt = `🏠 Inicio > 🛒 Catálogo > *${servicio.nombre}*\n〰️〰️〰️〰️〰️〰️〰️〰️\n⏳ *Duración:* ${servicio.duracion}\n\n` +
-      `📈 *VALOR DE 1 DÓLAR HOY:*\n• BCV: ${agente.tasas.bcv.toFixed(2)} Bs\n• USDT: ${agente.tasas.usdt.toFixed(2)} Bs\n• EURO: ${agente.tasas.euro.toFixed(2)} Bs\n\n` +
-      `💵 *INVERSIÓN TOTAL:*\n• BCV (Pago Móvil): *$${servicio.precio_bcv.toFixed(2)}* ➔ (${pBCV} Bs)\n• USDT (Binance): *$${servicio.precio_usdt.toFixed(2)}* ➔ (${pUSDT} Bs)\n• EURO (Zinli): *$${servicio.precio_euro.toFixed(2)}* ➔ (${pEUR} Bs)\n\n` +
-      `Si deseas continuar, elige "Iniciar Pago":`;
+      `💵 *PRECIO DEL SERVICIO:*\n` +
+      `• Valor referencial: *$${servicio.venta.toFixed(2)}*\n` +
+      `• Total a pagar: *${pBCV} Bs* (Tasa Euro: ${agente.tasas.euro.toFixed(2)})\n\n` +
+      `⚠️ *Método único de pago:* Pago Móvil Nacional\n\n` +
+      `Si deseas continuar, elige "Pagar con Pago Móvil":`;
 
     await ctx.editMessageText(txt, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
-      [{ text: "💳 Iniciar Pago", callback_data: `pago_${servicio.id}` }],
+      [{ text: "💳 Pagar con Pago Móvil", callback_data: `pago_${servicio.id}` }],
       [{ text: "🔙 Catálogo", callback_data: "menu_catalogo" }, { text: "🏠 Menú", callback_data: "menu_inicio" }]
     ]}}).catch(()=>{});
   });
 
+  // FLUJO DE PAGO DIRECTO A PAGO MÓVIL
   botTienda.action(`pago_${servicio.id}`, async (ctx) => {
     await ctx.answerCbQuery().catch(()=>{});
+    
+    const pBCV = (servicio.venta * agente.tasas.euro).toFixed(2);
+    
     intencionCompra.set(ctx.from.id, { 
       servicio: servicio.nombre, id_servicio: servicio.id, costo: servicio.costo, 
-      precio_usdt: servicio.precio_usdt, precio_euro: servicio.precio_euro, precio_bcv: servicio.precio_bcv,
+      venta: servicio.venta, ganancia: (servicio.venta - servicio.costo).toFixed(2), moneda: 'BCV'
     });
     
-    await ctx.editMessageText(`💳 *MÉTODO DE PAGO*\n\nSelecciona con qué moneda pagarás *${servicio.nombre}*:`, {
+    const datosPagoMovil = `\n🏦 *Datos de Pago Móvil*\nBanco: Venezuela (0102)\nTeléfono: \`04262333684\`\nCédula: \`V27145645\``;
+    
+    let textoPago = `🧾 *RESUMEN DE FACTURACIÓN*\n〰️〰️〰️〰️〰️〰️〰️〰️\n🛒 *Servicio:* ${servicio.nombre}\n\n_(Toca los datos bancarios para copiarlos)_\n\n`;
+    textoPago += `${datosPagoMovil}\n\n🇻🇪 *MONTO EXACTO A TRANSFERIR: ${pBCV} Bs*`; 
+
+    await ctx.editMessageText(`${textoPago}\n〰️〰️〰️〰️〰️〰️〰️〰️\n1️⃣ Realiza el pago exacto.\n2️⃣ Presiona abajo para subir comprobante o escribe tu número de referencia.`, {
       parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
-        [{ text: `USDT TRC20 / Binance`, callback_data: "pagar_usdt" }, { text: `EURO Zinli`, callback_data: "pagar_euro" }],
-        [{ text: `BCV Pago Móvil`, callback_data: "pagar_bcv" }],
-        [{ text: "🔙 Atrás", callback_data: `item_${servicio.id}` }]
+        [{ text: "📤 Subir Comprobante Foto", callback_data: "subir_pago" }],
+        [{ text: "🏠 Cancelar Operación", callback_data: "menu_inicio" }]
       ]}
     }).catch(()=>{});
   });
-});
-
-botTienda.action(/pagar_(.+)/, async (ctx) => {
-  const moneda = ctx.match[1].toUpperCase();
-  await ctx.answerCbQuery().catch(()=>{});
-  let compra = intencionCompra.get(ctx.from.id);
-  if (!compra) return ctx.editMessageText("❌ Sesión agotada. Inicia la compra de nuevo.", { reply_markup: { inline_keyboard: [[{ text: "🏠 Menú", callback_data: "menu_inicio" }]] }}).catch(()=>{});
-  
-  compra.moneda = moneda;
-  let montoBs = 0, montoDivisa = compra[`precio_${moneda.toLowerCase()}`];
-  compra.venta = montoDivisa;
-  compra.ganancia = (compra.venta - compra.costo).toFixed(2);
-
-  let textoPago = `🧾 *RESUMEN DE FACTURACIÓN*\n〰️〰️〰️〰️〰️〰️〰️〰️\n🛒 *Servicio:* ${compra.servicio}\n\n_(Toca los datos bancarios para copiarlos)_\n\n`;
-  const datosPagoMovil = `\n🏦 *Datos de Pago Móvil (Alternativa BCV)*\nBanco: Venezuela (0102)\nTeléfono: \`04262333684\`\nCédula: \`V27145645\``;
-  
-  if (moneda === 'USDT') { 
-    montoBs = (montoDivisa * agente.tasas.usdt).toFixed(2); 
-    textoPago += `*USDT (Red TRC20)*\nDirección:\n\`TNCFjTLYp63k2ocAooAnTUJbodaWLrRQhh\`\n\n💵 *MONTO EXACTO: ${montoDivisa.toFixed(2)} USDT*\n${datosPagoMovil}\n🇻🇪 *(Equivale: ${montoBs} Bs)*`; 
-  }
-  if (moneda === 'EURO') { 
-    montoBs = (montoDivisa * agente.tasas.euro).toFixed(2); 
-    textoPago += `*ZINLI (EURO)*\nCorreo: \`wilmergabriellucenacrespo\`\n\n💵 *MONTO EXACTO: ${montoDivisa.toFixed(2)} €*\n${datosPagoMovil}\n🇻🇪 *(Equivale: ${montoBs} Bs)*`; 
-  }
-  if (moneda === 'BCV') { 
-    montoBs = (montoDivisa * agente.tasas.bcv).toFixed(2); 
-    textoPago += `*PAGO MÓVIL PRINCIPAL*\nBanco: Venezuela (0102)\nTeléfono: \`04262333684\`\nCédula: \`V27145645\`\n\n🇻🇪 *MONTO EXACTO: ${montoBs} Bs*`; 
-  }
-
-  intencionCompra.set(ctx.from.id, compra);
-  await ctx.editMessageText(`${textoPago}\n〰️〰️〰️〰️〰️〰️〰️〰️\n1️⃣ Realiza el pago exacto.\n2️⃣ Presiona abajo para subir comprobante o escribe tu número de referencia.`, {
-    parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
-      [{ text: "📤 Subir Comprobante Foto", callback_data: "subir_pago" }],
-      [{ text: "🔙 Elegir Otra Moneda", callback_data: `pago_${compra.id_servicio}` }],
-      [{ text: "🏠 Cancelar Operación", callback_data: "menu_inicio" }]
-    ]}
-  }).catch(()=>{});
 });
 
 botTienda.action('subir_pago', async (ctx) => {
@@ -301,8 +264,7 @@ botTienda.on('photo', async (ctx, next) => {
     parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🏠 Menú Principal", callback_data: "menu_inicio" }]] }
   }).catch(()=>{});
 
-  let iconoMoneda = compraData.moneda === 'USDT' ? '🟢' : (compraData.moneda === 'EURO' ? '💶' : '🇻🇪');
-  const fichaAdmin = `🚨 *¡NUEVA ORDEN DE COMPRA! (#${ordenId})*\n〰️〰️〰️〰️〰️〰️〰️〰️\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n🛒 Servicio: ${compraData.servicio}\n💵 Método: ${iconoMoneda} ${compraData.moneda}\n💰 Ganancia: $${compraData.ganancia}`;
+  const fichaAdmin = `🚨 *¡NUEVA ORDEN DE COMPRA! (#${ordenId})*\n〰️〰️〰️〰️〰️〰️〰️〰️\n👤 Cliente: ${ctx.from.first_name}\n🆔 ID: \`${ctx.from.id}\`\n🛒 Servicio: ${compraData.servicio}\n💵 Método: 🇻🇪 PAGO MÓVIL\n💰 Ganancia: $${compraData.ganancia}`;
 
   try {
     const linkFoto = await ctx.telegram.getFileLink(fileId);
