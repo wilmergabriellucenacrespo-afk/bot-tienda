@@ -258,7 +258,7 @@ botTienda.action(/consultar_(.+)/, async (ctx) => {
 
 botTienda.action('subir_pago', async (ctx) => {
   await ctx.answerCbQuery().catch(()=>{});
-  await ctx.editMessageText('📸 *Enviar Comprobante*\n\nAdjunta y envía la foto de tu pago o el archivo PDF en este chat. Si no tienes foto, escribe tu número de referencia.', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Cancelar", callback_data: "menu_inicio" }]] } }).catch(()=>{});
+  await ctx.editMessageText('📸 *Enviar Comprobante*\n\nAdjunta y envía la foto de tu pago o el archivo PDF en este chat.', { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🔙 Cancelar", callback_data: "menu_inicio" }]] } }).catch(()=>{});
 });
 
 // 🔥 RECEPCIÓN COMPROBANTE (FOTOS Y PDF) MIGRADO A FIREBASE
@@ -293,17 +293,13 @@ botTienda.on(['photo', 'document'], async (ctx, next) => {
   const markupAprobacion = { inline_keyboard: [[{ text: "✅ Aprobar", callback_data: `aprobar_${ordenId}` }], [{ text: "❌ Rechazar", callback_data: `rechazar_${ordenId}` }]] };
   
   try {
-    // 1. El Bot Tienda genera un enlace web temporal del archivo
     const fileLink = await botTienda.telegram.getFileLink(fileId);
-    
-    // 2. El Bot Administrador usa ese enlace para enviarte la imagen/PDF
     if (esPdf) {
       await botAdmin.telegram.sendDocument(MI_ID, { url: fileLink.href }, { caption: fichaAdmin, parse_mode: 'Markdown', reply_markup: markupAprobacion });
     } else {
       await botAdmin.telegram.sendPhoto(MI_ID, { url: fileLink.href }, { caption: fichaAdmin, parse_mode: 'Markdown', reply_markup: markupAprobacion });
     }
   } catch (error) {
-    // 3. Respaldo: Si el archivo del cliente pesa más de 20MB, te avisa en texto para que vayas al otro bot a verlo.
     await botAdmin.telegram.sendMessage(MI_ID, `${fichaAdmin}\n\n⚠️ *AVISO:* El archivo es muy pesado o hubo un error de transferencia. Revisa el chat del Bot Tienda para ver la foto.`, { parse_mode: 'Markdown', reply_markup: markupAprobacion }).catch(()=>{});
   }
   
@@ -319,7 +315,6 @@ botTienda.on('message', async (ctx, next) => {
     return next(); 
   }
   
-  // VERIFICAR SI ENVIÓ REFERENCIA EN VEZ DE FOTO
   const carritoRef = db.collection('carritos').doc(ctx.from?.id?.toString());
   const carritoDoc = await carritoRef.get();
   
@@ -464,19 +459,30 @@ botAdmin.action('admin_buscar_inicio', async (ctx) => {
   await ctx.editMessageText(`🔍 *BUSCADOR DE CLIENTES*\n\nEnvía el ID numérico del cliente para localizar su ficha y poder escribirle al privado.`, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
 
-// --- APROBACIÓN DE ÓRDENES (CORREGIDO) ---
-botAdmin.action(/aprobar_(.+)/, async (ctx) => {
-  await ctx.answerCbQuery().catch(()=>{}); // <-- Agregado para detener la carga
-  const ordenId = ctx.match[1];
-  const docOrden = await db.collection('ordenes_pendientes').doc(ordenId).get();
+// AQUI ESTA LA CORRECCION DEL BOTÓN CARGANDO
+botAdmin.action(/stock_si_(\d+)_(.+)/, async (ctx) => {
+  await ctx.answerCbQuery().catch(()=>{}); // <-- DETIENE EL RELOJITO
   
-  if (!docOrden.exists) return ctx.answerCbQuery('Esta orden ya fue procesada o no existe.', { show_alert: true }).catch(()=>{});
+  const userId = ctx.match[1];
+  const sId = ctx.match[2];
+  const servicio = agente.servicios.find(s => s.id === sId);
+  await ctx.editMessageText(`✅ Le confirmaste a \`${userId}\` que SÍ HAY STOCK.`).catch(()=>{});
+
+  if(servicio) {
+     await botTienda.telegram.sendMessage(userId, `✅ *¡Buenas noticias!*\n\nSí tenemos disponibilidad inmediata para *${servicio.nombre}*.\n\nPuedes proceder con tu compra ahora mismo:`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "💳 Pagar con Pago Móvil", callback_data: `pago_${sId}` }]] } }).catch(()=>{});
+  }
+});
+
+// AQUI ESTA LA CORRECCION DEL BOTÓN CARGANDO
+botAdmin.action(/stock_no_(\d+)_(.+)/, async (ctx) => {
+  await ctx.answerCbQuery().catch(()=>{}); // <-- DETIENE EL RELOJITO
   
-  const orden = docOrden.data();
-  adminEstados.set('ENTREGANDO', orden);
-  await ctx.deleteMessage().catch(()=>{});
-  const msg = `✅ *APROBANDO ORDEN #${ordenId}*\n\nCopia, llena y envía:\n\n\`Correo: \nClave: \nPin: \``;
-  await ctx.reply(msg, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar Entrega", callback_data: "admin_inicio" }]] } }).catch(()=>{});
+  const userId = ctx.match[1];
+  const sId = ctx.match[2];
+  const servicio = agente.servicios.find(s => s.id === sId) || { nombre: 'este servicio' };
+  await ctx.editMessageText(`❌ Le indicaste a \`${userId}\` que ESTÁ AGOTADO.`).catch(()=>{});
+
+  await botTienda.telegram.sendMessage(userId, `❌ *Aviso de Disponibilidad*\n\nLamentamos informarte que *${servicio.nombre}* se encuentra temporalmente agotado.\n\nPor favor, consulta nuevamente más tarde o revisa nuestro catálogo para otras opciones.`, { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: "🛒 Ver Catálogo", callback_data: "menu_catalogo" }]] } }).catch(()=>{});
 });
 
 botAdmin.action(/admin_clientes_(\d+)/, async (ctx) => {
@@ -650,8 +656,8 @@ botAdmin.action('admin_tasas_manual', async (ctx) => {
   await ctx.editMessageText(msj, { parse_mode: 'Markdown', reply_markup: btnVolverAdmin }).catch(()=>{});
 });
 
-// --- APROBACIÓN DE ÓRDENES (CORREGIDO) ---
 botAdmin.action(/aprobar_(.+)/, async (ctx) => {
+  await ctx.answerCbQuery().catch(()=>{});
   const ordenId = ctx.match[1];
   const docOrden = await db.collection('ordenes_pendientes').doc(ordenId).get();
   
@@ -665,6 +671,7 @@ botAdmin.action(/aprobar_(.+)/, async (ctx) => {
 });
 
 botAdmin.action(/rechazar_(.+)/, async (ctx) => {
+  await ctx.answerCbQuery().catch(()=>{});
   const ordenId = ctx.match[1];
   const docOrden = await db.collection('ordenes_pendientes').doc(ordenId).get();
   
@@ -675,7 +682,7 @@ botAdmin.action(/rechazar_(.+)/, async (ctx) => {
   await ctx.deleteMessage().catch(()=>{}); 
   
   await db.collection('ordenes_pendientes').doc(ordenId).delete().catch(()=>{});
-  await ctx.answerCbQuery('Rechazada exitosamente.').catch(()=>{}); 
+  await ctx.reply('✅ Rechazada exitosamente. El usuario fue notificado.', { reply_markup: btnVolverAdmin }).catch(()=>{}); 
 });
 
 botAdmin.action(/soporte_res_(.+)/, async (ctx) => {
@@ -845,11 +852,9 @@ botAdmin.launch().then(() => console.log("Panel Admin Iniciado.")).catch(console
 // 🌐 SERVIDOR WEB (SISTEMA ANTI-SUSPENSIÓN RENDER)
 // ==========================================
 const server = http.createServer((req, res) => { 
-  // Esta es la ruta que visitará el bot externo para mantener vivo a Render
   if (req.url === '/ping' || req.url === '/') {
     res.writeHead(200, { 'Content-Type': 'text/plain' }); 
     res.end('Nexo Digital Bot Activo y Despierto'); 
-    // Esto imprimirá un mensaje en tus logs de Render cada vez que reciba el toque
     console.log('⚡ Ping recibido. Sistema mantenido despierto.');
   } else {
     res.writeHead(404);
